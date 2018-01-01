@@ -208,7 +208,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 }
 
 /*
-func (this *codec) send(value uint32) error {
+func (this *codec) send(scancode uint32) error {
 	buf := make([]*uint32,0)
 	buf = append(buf,HEADER_PULSE)
 	buf = append(buf,HEADER_SPACE)
