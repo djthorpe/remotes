@@ -7,7 +7,7 @@
 	For Licensing and Usage information, please see LICENSE.md
 */
 
-package sony
+package nec
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-// Sony Configuration
+// NEC Configuration
 type Codec struct {
 	LIRC gopi.LIRC
 }
@@ -46,35 +46,31 @@ const (
 	// state
 	STATE_EXPECT_HEADER_PULSE state = iota
 	STATE_EXPECT_HEADER_SPACE
-	STATE_EXPECT_BIT
+	STATE_EXPECT_PULSE
 	STATE_EXPECT_SPACE
-	STATE_EXPECT_TRAIL
-	STATE_EXPECT_REPEAT
 )
 
 const (
 	TOLERANCE = 25 // 25% tolerance on values
-	LENGTH    = 12 // 12 bits per scancode
+	LENGTH    = 24 // 24 bits per scancode
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // VARIABLES
 
 var (
-	HEADER_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 2500, TOLERANCE)
-	HEADER_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 550, TOLERANCE)
-	ONE_PULSE     = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1200, TOLERANCE)
-	ZERO_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)
-	ONEZERO_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 600, TOLERANCE)
-	REPEAT_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 24534, TOLERANCE)
-	TRAIL_PULSE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)
+	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9098, TOLERANCE)
+	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4418, TOLERANCE)
+	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 643, TOLERANCE)
+	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1608, TOLERANCE)
+	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 483, TOLERANCE)
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
 
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<remotes.Codec.Sony.Open>{ lirc=%v }", config.LIRC)
+	log.Debug("<remotes.Codec.NEC.Open>{ lirc=%v }", config.LIRC)
 
 	if config.LIRC == nil {
 		return nil, gopi.ErrBadParameter
@@ -96,7 +92,7 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 }
 
 func (this *codec) Close() error {
-	this.log.Debug2("<remotes.Codec.Sony.Close>{ }")
+	this.log.Debug2("<remotes.Codec.NEC.Close>{ }")
 
 	// Unsubscribe
 	this.lirc.Unsubscribe(this.events)
@@ -118,14 +114,14 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.Sony>{}")
+	return fmt.Sprintf("<remotes.Codec.NEC>{}")
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
 func (this *codec) Name() string {
-	return "sony"
+	return "nec"
 }
 
 func (this *codec) Reset() {
@@ -153,7 +149,7 @@ FOR_LOOP:
 }
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.Codec.Sony.Receive>{ evt=%v }", evt)
+	this.log.Debug2("<remotes.Codec.NEC.Receive>{ evt=%v }", evt)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -163,62 +159,29 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		}
 	case STATE_EXPECT_HEADER_SPACE:
 		if HEADER_SPACE.Matches(evt) {
-			this.state = STATE_EXPECT_BIT
+			this.state = STATE_EXPECT_PULSE
 		} else {
 			this.Reset()
 		}
-	case STATE_EXPECT_BIT:
-		if ONE_PULSE.Matches(evt) {
-			this.value |= 1
-			this.state = STATE_EXPECT_SPACE
-		} else if ZERO_PULSE.Matches(evt) {
-			this.value |= 0
+	case STATE_EXPECT_PULSE:
+		if BIT_PULSE.Matches(evt) {
 			this.state = STATE_EXPECT_SPACE
 		} else {
 			this.Reset()
 		}
 	case STATE_EXPECT_SPACE:
-		if ONEZERO_SPACE.Matches(evt) {
-			this.value = this.value << 1
+		if ONE_SPACE.Matches(evt) {
+			this.value = (this.value << 1) | 1
 			this.length = this.length + 1
-			if this.length == (LENGTH - 1) {
-				this.state = STATE_EXPECT_TRAIL
-			} else {
-				this.state = STATE_EXPECT_BIT
-			}
+			this.state = STATE_EXPECT_PULSE
+		} else if ZERO_SPACE.Matches(evt) {
+			this.value = (this.value << 1)
+			this.length = this.length + 1
+			this.state = STATE_EXPECT_PULSE
 		} else {
 			this.Reset()
 		}
-	case STATE_EXPECT_TRAIL:
-		if TRAIL_PULSE.Matches(evt) {
-			fmt.Printf("value=%X\n", this.value)
-			fmt.Printf("TRAIL\n")
-			this.state = STATE_EXPECT_REPEAT
-		} else {
-			this.Reset()
-		}
-	case STATE_EXPECT_REPEAT:
-		if REPEAT_SPACE.Matches(evt) {
-			fmt.Printf("REPEAT\n")
-		}
-		this.Reset()
 	default:
 		this.Reset()
 	}
 }
-
-/*
-func (this *codec) send(value uint32) error {
-	buf := make([]*uint32,0)
-	buf = append(buf,HEADER_PULSE)
-	buf = append(buf,HEADER_SPACE)
-	for bit := 0; bit < LENGTH; bit++ {
-		if value & 1 != 0 {
-			buf = append(buf,ONE_PULSE)
-		} else {
-			buf = append(buf,ZERO_PULSE)
-		}
-		buf = append(buf,ONEZERO_SPACE)
-		value = value >> 1
-	}
-*/
