@@ -21,7 +21,4 @@ type Codec interface {
 
 	// Reset codec to initial state
 	Reset()
-
-	// Receive a message from LIRC
-	Receive(evt gopi.LIRCEvent)
 }

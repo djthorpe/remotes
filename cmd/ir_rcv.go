@@ -14,6 +14,7 @@ import (
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
+	"github.com/djthorpe/remotes"
 
 	// Modules
 	_ "github.com/djthorpe/gopi/sys/hw/linux"
@@ -28,24 +29,26 @@ var (
 ////////////////////////////////////////////////////////////////////////////////
 
 func EventLoop(app *gopi.AppInstance, done chan struct{}) error {
-	if app.LIRC == nil {
-		return errors.New("Missing LIRC module")
+	if sony := app.ModuleInstance("remotes/sony").(remotes.Codec); sony == nil {
+		return errors.New("Missing Sony Codec")
 	}
+	/*
+	   	edge := app.LIRC.Subscribe()
 
-	edge := app.LIRC.Subscribe()
+	   FOR_LOOP:
+	   	for {
+	   		select {
+	   		case evt := <-edge:
+	   			fmt.Println("EVENT: ", evt)
+	   		case <-done:
+	   			break FOR_LOOP
+	   		}
+	   	}
 
-FOR_LOOP:
-	for {
-		select {
-		case evt := <-edge:
-			fmt.Println("EVENT: ", evt)
-		case <-done:
-			break FOR_LOOP
-		}
-	}
+	   	// Unsubscribe from edges
+	   	app.LIRC.Unsubscribe(edge)
+	*/
 
-	// Unsubscribe from edges
-	app.LIRC.Unsubscribe(edge)
 	return nil
 }
 

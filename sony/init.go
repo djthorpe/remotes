@@ -24,7 +24,9 @@ func init() {
 		Requires: []string{"lirc"},
 		Type:     gopi.MODULE_TYPE_OTHER,
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
-			return gopi.Open(Sony{}, app.Logger)
+			return gopi.Open(Codec{
+				LIRC: app.ModuleInstance("lirc").(gopi.LIRC),
+			}, app.Logger)
 		},
 	})
 }
