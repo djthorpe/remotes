@@ -9,7 +9,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	// Frameworks
@@ -28,7 +27,7 @@ var (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func EventLoop(app *gopi.AppInstance, done chan struct{}) error {
+func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
 	if sony := app.ModuleInstance("remotes/sony").(remotes.Codec); sony == nil {
 		return errors.New("Missing Sony Codec")
 	}
@@ -54,7 +53,7 @@ func EventLoop(app *gopi.AppInstance, done chan struct{}) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func MainLoop(app *gopi.AppInstance, done chan struct{}) error {
+func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
 
 	if app.LIRC == nil {
 		return errors.New("Missing LIRC module")
@@ -70,28 +69,10 @@ func MainLoop(app *gopi.AppInstance, done chan struct{}) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func main_inner() int {
+func main() {
 	// Configuration
 	config := gopi.NewAppConfig(CODECS...)
-	// Create the application
-	app, err := gopi.NewAppInstance(config)
-	if err != nil {
-		if err != gopi.ErrHelp {
-			fmt.Fprintln(os.Stderr, err)
-			return -1
-		}
-		return 0
-	}
-	defer app.Close()
 
-	// Run the application
-	if err := app.Run(MainLoop, EventLoop); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return -1
-	}
-	return 0
-}
-
-func main() {
-	os.Exit(main_inner())
+	// Run the command line tool
+	os.Exit(gopi.CommandLineTool(config, MainLoop, EventLoop))
 }

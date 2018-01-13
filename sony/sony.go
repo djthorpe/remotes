@@ -31,7 +31,7 @@ type codec struct {
 	lirc   gopi.LIRC
 	cancel context.CancelFunc
 	done   chan struct{}
-	events chan gopi.Event
+	events <-chan gopi.Event
 	state  state
 	value  uint32
 	length uint
