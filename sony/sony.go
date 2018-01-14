@@ -70,7 +70,7 @@ var (
 	ONE_PULSE     = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1200, TOLERANCE)
 	ZERO_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)
 	ONEZERO_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 600, TOLERANCE)
-	REPEAT_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 24534, TOLERANCE)
+	REPEAT_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 24500, TOLERANCE)
 	TRAIL_PULSE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)
 )
 
@@ -241,6 +241,8 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(value uint32, repeats uint) error {
+	this.log.Debug("<remotes.Codec.Sony.Send>{ value=%X repeats=%v }", value, repeats)
+
 	// Check to make sure the scancode value is less than
 	// or equal to the length and repeats is at least one
 	mask := uint32(1<<LENGTH) - 1
@@ -253,16 +255,16 @@ func (this *codec) Send(value uint32, repeats uint) error {
 	pulses = append(pulses, HEADER_PULSE.Value)
 
 	for r := uint(0); r < repeats; r++ {
-		v := value
+		mask := uint32(1) << (LENGTH - 1)
 		pulses = append(pulses, HEADER_SPACE.Value)
 		for i := 0; i < LENGTH; i++ {
-			if v&1 != 0 {
+			if value&mask != 0 {
 				pulses = append(pulses, ONE_PULSE.Value)
 			} else {
 				pulses = append(pulses, ZERO_PULSE.Value)
 			}
 			pulses = append(pulses, ONEZERO_SPACE.Value)
-			v = v >> 1
+			mask = mask >> 1
 		}
 		pulses = append(pulses, TRAIL_PULSE.Value)
 		if r+1 < repeats {
@@ -270,24 +272,17 @@ func (this *codec) Send(value uint32, repeats uint) error {
 		}
 	}
 
-	fmt.Println(pulses)
+	// Debug
+	if this.log.IsDebug() {
+		for i, value := range pulses {
+			if i%2 == 0 {
+				fmt.Println(" mark", value)
+			} else {
+				fmt.Println("space", value)
+			}
+		}
+	}
 
 	// Perform the sending
 	return this.lirc.PulseSend(pulses)
 }
-
-/*
-func (this *codec) send(scancode uint32) error {
-	buf := make([]*uint32,0)
-	buf = append(buf,HEADER_PULSE)
-	buf = append(buf,HEADER_SPACE)
-	for bit := 0; bit < LENGTH; bit++ {
-		if value & 1 != 0 {
-			buf = append(buf,ONE_PULSE)
-		} else {
-			buf = append(buf,ZERO_PULSE)
-		}
-		buf = append(buf,ONEZERO_SPACE)
-		value = value >> 1
-	}
-*/

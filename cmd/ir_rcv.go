@@ -23,12 +23,26 @@ import (
 )
 
 var (
-	CODECS = []string{"remotes/sony12"}
+	CODECS             = []string{"remotes/sony12"}
+	RCV_TIMEOUT uint32 = 100 // ms
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
+	lirc := app.LIRC
+
+	// Try and set the timeout, ignore if feature is not implemented
+	if lirc == nil {
+		return errors.New("Missing LIRC module")
+	} else if err := lirc.SetRcvTimeout(RCV_TIMEOUT); err != nil && err != gopi.ErrNotImplemented {
+		return err
+	} else if err != gopi.ErrNotImplemented {
+		if lirc.SetRcvTimeoutReports(true); err != nil && err != gopi.ErrNotImplemented {
+			return err
+		}
+	}
+
 	sony := app.ModuleInstance("remotes/sony12").(remotes.Codec)
 	if sony == nil {
 		return errors.New("Missing Sony Codec")
@@ -39,7 +53,7 @@ FOR_LOOP:
 	for {
 		select {
 		case evt := <-edge:
-			if event, ok := evt.(*remotes.RemoteEvent); ok {
+			if event, ok := evt.(*remotes.RemoteEvent); event != nil && ok {
 				fmt.Printf("%10s %X\n", event.Codec(), event.Scancode())
 				if err := sony.Send(event.Scancode(), 2); err != nil {
 					app.Logger.Error("%v", err)
