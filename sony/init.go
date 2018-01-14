@@ -20,7 +20,7 @@ import (
 func init() {
 	// Register remotes/sony
 	gopi.RegisterModule(gopi.Module{
-		Name:     "remotes/sony",
+		Name:     "remotes/sony12",
 		Requires: []string{"lirc"},
 		Type:     gopi.MODULE_TYPE_OTHER,
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {

@@ -23,13 +23,13 @@ import (
 )
 
 var (
-	CODECS = []string{"remotes/sony"}
+	CODECS = []string{"remotes/sony12"}
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
-	sony := app.ModuleInstance("remotes/sony").(remotes.Codec)
+	sony := app.ModuleInstance("remotes/sony12").(remotes.Codec)
 	if sony == nil {
 		return errors.New("Missing Sony Codec")
 	}
@@ -39,7 +39,14 @@ FOR_LOOP:
 	for {
 		select {
 		case evt := <-edge:
-			fmt.Println(evt)
+			if event, ok := evt.(*remotes.RemoteEvent); ok {
+				fmt.Printf("%10s %X\n", event.Codec(), event.Scancode())
+				if err := sony.Send(event.Scancode(), 2); err != nil {
+					app.Logger.Error("%v", err)
+				}
+			} else {
+				fmt.Println(evt)
+			}
 		case <-done:
 			break FOR_LOOP
 		}

@@ -9,104 +9,94 @@
 package remotes
 
 import (
-	"fmt"
-	"math"
-	"time"
-
 	"github.com/djthorpe/gopi"
 )
 
-// A coder/decoder for remote
+/////////////////////////////////////////////////////////////////////
+// TYPES
+
+type (
+	RemoteCode  gopi.KeyCode
+	RemoteCodec uint
+)
+
+/////////////////////////////////////////////////////////////////////
+// CONSTANTS
+
+const (
+	CODEC_RC5 RemoteCodec = iota
+	CODEC_RC5X_20
+	CODEC_RC5_SZ
+	CODEC_JVC
+	CODEC_SONY12
+	CODEC_SONY15
+	CODEC_SONY20
+	CODEC_NEC
+	CODEC_NECX
+	CODEC_NEC32
+	CODEC_SANYO
+	CODEC_RC6_0
+	CODEC_RC6_6A_20
+	CODEC_RC6_6A_24
+	CODEC_RC6_6A_32
+	CODEC_RC6_MCE
+	CODEC_SHARP
+)
+
+/////////////////////////////////////////////////////////////////////
+// INTERFACE
+
 type Codec interface {
 	gopi.Driver
 	gopi.Publisher
 
-	// Return short name for the codec
-	Name() string
+	// Return type for the codec
+	Type() RemoteCodec
+
+	// Send Scancode
+	Send(value uint32, repeats uint) error
 }
 
 /////////////////////////////////////////////////////////////////////
-// Mark Space implementation
+// STRINGIFY
 
-// A mark or space value
-type MarkSpace struct {
-	Type     gopi.LIRCType
-	Min, Max uint32
-}
-
-func NewMarkSpace(t gopi.LIRCType, value, tolerance uint32) *MarkSpace {
-	delta := float64(value) * float64(tolerance) / 100.0
-	min := math.Max(0, float64(value)-delta)
-	max := float64(value) + delta
-	return &MarkSpace{Type: t, Min: uint32(min), Max: uint32(max)}
-}
-
-func (m *MarkSpace) Matches(evt gopi.LIRCEvent) bool {
-	if m.Type != evt.Type() {
-		return false
+func (c RemoteCodec) String() string {
+	switch c {
+	case CODEC_RC5:
+		return "CODEC_RC5"
+	case CODEC_RC5X_20:
+		return "CODEC_RC5X_20"
+	case CODEC_RC5_SZ:
+		return "CODEC_RC5_SZ"
+	case CODEC_JVC:
+		return "CODEC_JVC"
+	case CODEC_SONY12:
+		return "CODEC_SONY12"
+	case CODEC_SONY15:
+		return "CODEC_SONY15"
+	case CODEC_SONY20:
+		return "CODEC_SONY20"
+	case CODEC_NEC:
+		return "CODEC_NEC"
+	case CODEC_NECX:
+		return "CODEC_NECX"
+	case CODEC_NEC32:
+		return "CODEC_NEC32"
+	case CODEC_SANYO:
+		return "CODEC_SANYO"
+	case CODEC_RC6_0:
+		return "CODEC_RC6_0"
+	case CODEC_RC6_6A_20:
+		return "CODEC_RC6_6A_20"
+	case CODEC_RC6_6A_24:
+		return "CODEC_RC6_6A_24"
+	case CODEC_RC6_6A_32:
+		return "CODEC_RC6_6A_32"
+	case CODEC_RC6_MCE:
+		return "CODEC_RC6_MCE"
+	case CODEC_SHARP:
+		return "CODEC_SHARP"
+	default:
+		return "[?? Invalid RemoteCodec value]"
 	}
-	if m.Min > evt.Value() {
-		return false
-	}
-	if m.Max < evt.Value() {
-		return false
-	}
-	return true
-}
-
-/////////////////////////////////////////////////////////////////////
-// gopi.InputEvent implementation
-
-type RemoteEvent struct {
-	source   Codec
-	ts       time.Duration
-	scancode uint32
-}
-
-func NewRemoteEvent(source Codec, ts time.Duration, scancode uint32) *RemoteEvent {
-	return &RemoteEvent{
-		source:   source,
-		ts:       ts,
-		scancode: scancode,
-	}
-}
-
-func (this *RemoteEvent) Source() gopi.Driver {
-	return this.source
-}
-
-func (*RemoteEvent) Name() string {
-	return "RemoteEvemt"
-}
-
-func (this *RemoteEvent) Timestamp() time.Duration {
-	return this.ts
-}
-
-func (*RemoteEvent) DeviceType() gopi.InputDeviceType {
-	return gopi.INPUT_TYPE_KEYBOARD
-}
-
-func (*RemoteEvent) EventType() gopi.InputEventType {
-	return gopi.INPUT_EVENT_KEYPRESS
-}
-
-func (this *RemoteEvent) Scancode() uint32 {
-	return this.scancode
-}
-
-func (*RemoteEvent) Position() gopi.Point {
-	return gopi.ZeroPoint
-}
-
-func (*RemoteEvent) Relative() gopi.Point {
-	return gopi.ZeroPoint
-}
-
-func (*RemoteEvent) Slot() uint {
-	return 0
-}
-
-func (this *RemoteEvent) String() string {
-	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X source=%v ts=%v }", this.scancode, this.source, this.ts)
 }

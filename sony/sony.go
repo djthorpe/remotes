@@ -31,6 +31,7 @@ type Codec struct {
 type codec struct {
 	log         gopi.Logger
 	lirc        gopi.LIRC
+	codec_type  remotes.RemoteCodec
 	cancel      context.CancelFunc
 	done        chan struct{}
 	events      <-chan gopi.Event
@@ -94,6 +95,7 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.events = this.lirc.Subscribe()
 	this.subscribers = evt.NewPubSub(0)
 	this.state = STATE_EXPECT_HEADER_PULSE
+	this.codec_type = remotes.CODEC_SONY12
 
 	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
 		this.cancel = cancel
@@ -130,14 +132,14 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.Sony>{ name=\"%v\" }", this.Name())
+	return fmt.Sprintf("<remotes.Codec.Sony>{ type=%v }", this.Type())
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
-func (this *codec) Name() string {
-	return "sony12"
+func (this *codec) Type() remotes.RemoteCodec {
+	return this.codec_type
 }
 
 func (this *codec) Reset() {
@@ -162,7 +164,7 @@ func (this *codec) Emit(scancode uint32) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// STATE MACHINE
+// RECEIVING STATE MACHINE
 
 func (this *codec) acceptEvents(ctx context.Context) {
 
@@ -233,6 +235,45 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 	default:
 		this.Reset()
 	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SENDING
+
+func (this *codec) Send(value uint32, repeats uint) error {
+	// Check to make sure the scancode value is less than
+	// or equal to the length and repeats is at least one
+	mask := uint32(1<<LENGTH) - 1
+	if value&mask != value || repeats == 0 {
+		return gopi.ErrBadParameter
+	}
+
+	// Create a container for mark/space
+	pulses := make([]uint32, 0)
+	pulses = append(pulses, HEADER_PULSE.Value)
+
+	for r := uint(0); r < repeats; r++ {
+		v := value
+		pulses = append(pulses, HEADER_SPACE.Value)
+		for i := 0; i < LENGTH; i++ {
+			if v&1 != 0 {
+				pulses = append(pulses, ONE_PULSE.Value)
+			} else {
+				pulses = append(pulses, ZERO_PULSE.Value)
+			}
+			pulses = append(pulses, ONEZERO_SPACE.Value)
+			v = v >> 1
+		}
+		pulses = append(pulses, TRAIL_PULSE.Value)
+		if r+1 < repeats {
+			pulses = append(pulses, REPEAT_SPACE.Value, HEADER_PULSE.Value)
+		}
+	}
+
+	fmt.Println(pulses)
+
+	// Perform the sending
+	return this.lirc.PulseSend(pulses)
 }
 
 /*
