@@ -20,16 +20,18 @@ import (
 // gopi.InputEvent implementation
 
 type RemoteEvent struct {
-	source   Codec
-	ts       time.Duration
-	scancode uint32
+	source     Codec
+	ts         time.Duration
+	devicecode uint32
+	scancode   uint32
 }
 
-func NewRemoteEvent(source Codec, ts time.Duration, scancode uint32) *RemoteEvent {
+func NewRemoteEvent(source Codec, ts time.Duration, scancode, devicecode uint32) *RemoteEvent {
 	return &RemoteEvent{
-		source:   source,
-		ts:       ts,
-		scancode: scancode,
+		source:     source,
+		ts:         ts,
+		scancode:   scancode,
+		devicecode: devicecode,
 	}
 }
 
@@ -61,6 +63,10 @@ func (this *RemoteEvent) Scancode() uint32 {
 	return this.scancode
 }
 
+func (this *RemoteEvent) Devicecode() uint32 {
+	return this.devicecode
+}
+
 func (*RemoteEvent) Position() gopi.Point {
 	return gopi.ZeroPoint
 }
@@ -74,5 +80,5 @@ func (*RemoteEvent) Slot() uint {
 }
 
 func (this *RemoteEvent) String() string {
-	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X source=%v ts=%v }", this.scancode, this.source, this.ts)
+	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X devicecode=0x%X source=%v ts=%v }", this.scancode, this.devicecode, this.source, this.ts)
 }

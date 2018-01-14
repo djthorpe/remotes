@@ -177,7 +177,7 @@ func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
 }
 
 func (this *codec) Emit(scancode uint32) {
-	this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode))
+	this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode, 0))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

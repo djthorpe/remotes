@@ -24,9 +24,28 @@ import (
 )
 
 var (
-	CODECS             = []string{"remotes/sony12", "remotes/sony15", "remotes/sony20", "remotes/nec32"}
+	CODECS             = []string{"remotes/sony12", "remotes/sony15", "remotes/sony20", "remotes/nec16", "remotes/nec32"}
 	RCV_TIMEOUT uint32 = 100 // ms
 )
+
+////////////////////////////////////////////////////////////////////////////////
+
+func PrintHeader() {
+	fmt.Printf("%15s %10s %10s\n", "Codec", "Scancode", "Device")
+	fmt.Printf("%15s %10s %10s\n", "---------------", "----------", "----------")
+}
+
+func PrintEvent(evt gopi.Event) {
+	if event, ok := evt.(*remotes.RemoteEvent); event != nil && ok {
+		fmt.Printf("%15s %10s %10s\n",
+			event.Codec(),
+			fmt.Sprintf("0x%X", event.Scancode()),
+			fmt.Sprintf("0x%X", event.Devicecode()),
+		)
+	} else {
+		fmt.Println(evt)
+	}
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,31 +63,31 @@ func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
 		}
 	}
 
-	sony := app.ModuleInstance("remotes/sony12").(remotes.Codec)
-	if sony == nil {
-		return errors.New("Missing Sony Codec")
-	}
-	edge := sony.Subscribe()
+	sony12 := app.ModuleInstance("remotes/sony12").(remotes.Codec).Subscribe()
+	sony15 := app.ModuleInstance("remotes/sony15").(remotes.Codec).Subscribe()
+	sony20 := app.ModuleInstance("remotes/sony20").(remotes.Codec).Subscribe()
+	nec16 := app.ModuleInstance("remotes/nec16").(remotes.Codec).Subscribe()
+	nec32 := app.ModuleInstance("remotes/nec32").(remotes.Codec).Subscribe()
+
+	PrintHeader()
 
 FOR_LOOP:
 	for {
 		select {
-		case evt := <-edge:
-			if event, ok := evt.(*remotes.RemoteEvent); event != nil && ok {
-				fmt.Printf("%10s %X\n", event.Codec(), event.Scancode())
-				if err := sony.Send(event.Scancode(), 2); err != nil {
-					app.Logger.Error("%v", err)
-				}
-			} else {
-				fmt.Println(evt)
-			}
+		case evt := <-sony12:
+			PrintEvent(evt)
+		case evt := <-sony15:
+			PrintEvent(evt)
+		case evt := <-sony20:
+			PrintEvent(evt)
+		case evt := <-nec16:
+			PrintEvent(evt)
+		case evt := <-nec32:
+			PrintEvent(evt)
 		case <-done:
 			break FOR_LOOP
 		}
 	}
-
-	// Unsubscribe from edges
-	sony.Unsubscribe(edge)
 
 	return nil
 }

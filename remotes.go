@@ -31,9 +31,9 @@ const (
 	CODEC_SONY12
 	CODEC_SONY15
 	CODEC_SONY20
-	CODEC_NEC
-	CODEC_NECX
+	CODEC_NEC16
 	CODEC_NEC32
+	CODEC_NECX
 	CODEC_SANYO
 	CODEC_RC6_0
 	CODEC_RC6_6A_20
@@ -76,12 +76,12 @@ func (c RemoteCodec) String() string {
 		return "CODEC_SONY15"
 	case CODEC_SONY20:
 		return "CODEC_SONY20"
-	case CODEC_NEC:
-		return "CODEC_NEC"
-	case CODEC_NECX:
-		return "CODEC_NECX"
+	case CODEC_NEC16:
+		return "CODEC_NEC16"
 	case CODEC_NEC32:
 		return "CODEC_NEC32"
+	case CODEC_NECX:
+		return "CODEC_NECX"
 	case CODEC_SANYO:
 		return "CODEC_SANYO"
 	case CODEC_RC6_0:

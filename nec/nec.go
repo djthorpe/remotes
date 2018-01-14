@@ -54,6 +54,10 @@ const (
 	STATE_EXPECT_HEADER_SPACE
 	STATE_EXPECT_PULSE
 	STATE_EXPECT_SPACE
+	STATE_EXPECT_REPEAT
+	STATE_EXPECT_REPEAT2
+	STATE_EXPECT_REPEAT3
+	STATE_EXPECT_REPEAT4
 )
 
 const (
@@ -67,8 +71,10 @@ var (
 	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)
 	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE)
 	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 650, TOLERANCE)
-	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1600, TOLERANCE)
-	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 500, TOLERANCE)
+	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1600, TOLERANCE)
+	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 500, TOLERANCE)
+	REPEAT_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 43500, TOLERANCE)
+	REPEAT_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 9000, TOLERANCE)
 )
 
 var (
@@ -173,8 +179,12 @@ func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
 	this.subscribers.Unsubscribe(subscriber)
 }
 
-func (this *codec) Emit(scancode uint32) {
-	this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode))
+func (this *codec) Emit(value uint32) {
+	if scan, device, err := codeForCodec(this.codec_type, value); err != nil {
+		this.log.Warn("Emit: %v", err)
+	} else {
+		this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scan, device))
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,14 +230,45 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		if ONE_SPACE.Matches(evt) {
 			this.value = (this.value << 1) | 1
 			this.length = this.length + 1
-			this.state = STATE_EXPECT_PULSE
 		} else if ZERO_SPACE.Matches(evt) {
 			this.value = (this.value << 1)
 			this.length = this.length + 1
-			this.state = STATE_EXPECT_PULSE
 		} else {
 			this.Reset()
 		}
+
+		// Advance state and emit scancode
+		if this.length == this.bit_length {
+			this.state = STATE_EXPECT_REPEAT
+		} else if this.length > 0 {
+			this.state = STATE_EXPECT_PULSE
+		}
+	case STATE_EXPECT_REPEAT:
+		if BIT_PULSE.Matches(evt) {
+			this.state = STATE_EXPECT_REPEAT2
+		} else {
+			this.Reset()
+		}
+	case STATE_EXPECT_REPEAT2:
+		fmt.Println("STATE_EXPECT_REPEAT2 type=", this.codec_type, "evt=", evt)
+		if REPEAT_SPACE.Matches(evt) {
+			this.state = STATE_EXPECT_REPEAT3
+		} else {
+			this.Reset()
+		}
+	case STATE_EXPECT_REPEAT3:
+		fmt.Println("STATE_EXPECT_REPEAT3 type=", this.codec_type, "evt=", evt)
+		if REPEAT_PULSE.Matches(evt) {
+			if this.length == this.bit_length {
+				this.Emit(this.value)
+			}
+			this.state = STATE_EXPECT_REPEAT4
+		} else {
+			this.Reset()
+		}
+	case STATE_EXPECT_REPEAT4:
+		fmt.Println("STATE_EXPECT_REPEAT4 type=", this.codec_type, "evt=", evt)
+		this.Reset()
 	default:
 		this.Reset()
 	}
@@ -245,10 +286,37 @@ func (this *codec) Send(value uint32, repeats uint) error {
 
 func bitLengthForCodec(codec remotes.RemoteCodec) uint {
 	switch codec {
+	case remotes.CODEC_NEC16:
+		return 16
 	case remotes.CODEC_NEC32:
 		return 32
 	default:
 		return 0
 	}
 
+}
+
+func codeForCodec(codec remotes.RemoteCodec, value uint32) (uint32, uint32, error) {
+	fmt.Printf("codec=%v code=0x%08X\n", codec, value)
+	switch codec {
+	case remotes.CODEC_NEC16:
+		if value&0xFFFF0000 != 0 {
+			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
+		}
+		scan := value & 0x000000FF
+		device := value & 0x0000FF00 >> 8
+		return scan, device, nil
+	case remotes.CODEC_NEC32:
+		// Lower 16 bits are the command - top 8 bits of the word are
+		//  the inverse of the bottom 8 bits, flip them around
+		value2 := value ^ 0x000000FF
+		if (value2 & 0x000000FF) != (value2 & 0x0000FF00 >> 8) {
+			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
+		}
+		scan := value & 0x000000FF
+		device := value & 0xFFFF0000 >> 16
+		return scan, device, nil
+	default:
+		return 0, 0, gopi.ErrBadParameter
+	}
 }
