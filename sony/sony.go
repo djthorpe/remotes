@@ -12,9 +12,11 @@ package sony
 import (
 	"context"
 	"fmt"
+	"time"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
+	evt "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
 )
 
@@ -27,14 +29,15 @@ type Codec struct {
 }
 
 type codec struct {
-	log    gopi.Logger
-	lirc   gopi.LIRC
-	cancel context.CancelFunc
-	done   chan struct{}
-	events <-chan gopi.Event
-	state  state
-	value  uint32
-	length uint
+	log         gopi.Logger
+	lirc        gopi.LIRC
+	cancel      context.CancelFunc
+	done        chan struct{}
+	events      <-chan gopi.Event
+	subscribers *evt.PubSub
+	state       state
+	value       uint32
+	length      uint
 }
 
 type state uint32
@@ -70,6 +73,10 @@ var (
 	TRAIL_PULSE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)
 )
 
+var (
+	timestamp = time.Now()
+)
+
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
 
@@ -85,6 +92,7 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.lirc = config.LIRC
 	this.done = make(chan struct{})
 	this.events = this.lirc.Subscribe()
+	this.subscribers = evt.NewPubSub(0)
 	this.state = STATE_EXPECT_HEADER_PULSE
 
 	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
@@ -98,16 +106,20 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 func (this *codec) Close() error {
 	this.log.Debug2("<remotes.Codec.Sony.Close>{ }")
 
-	// Unsubscribe
+	// Unsubscribe from LIRC signals
 	this.lirc.Unsubscribe(this.events)
 
 	// Cancel background thread, wait for done signal
 	this.cancel()
 	_ = <-this.done
 
+	// Remove subscribers to this codec
+	this.subscribers.Close()
+
 	// Blank out member variables
 	close(this.done)
 	this.events = nil
+	this.subscribers = nil
 	this.lirc = nil
 	this.done = nil
 
@@ -118,14 +130,14 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.Sony>{}")
+	return fmt.Sprintf("<remotes.Codec.Sony>{ name=\"%v\" }", this.Name())
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
 func (this *codec) Name() string {
-	return "sony"
+	return "sony12"
 }
 
 func (this *codec) Reset() {
@@ -135,9 +147,25 @@ func (this *codec) Reset() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// PUBLISHER INTERFACE
+
+func (this *codec) Subscribe() <-chan gopi.Event {
+	return this.subscribers.Subscribe()
+}
+
+func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
+	this.subscribers.Unsubscribe(subscriber)
+}
+
+func (this *codec) Emit(scancode uint32) {
+	this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode))
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // STATE MACHINE
 
 func (this *codec) acceptEvents(ctx context.Context) {
+
 FOR_LOOP:
 	for {
 		select {
@@ -191,7 +219,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		}
 	case STATE_EXPECT_TRAIL:
 		if TRAIL_PULSE.Matches(evt) {
-			fmt.Printf("value=%X\n", this.value)
+			this.Emit(this.value)
 			fmt.Printf("TRAIL\n")
 			this.state = STATE_EXPECT_REPEAT
 		} else {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -53,14 +54,42 @@ FOR_LOOP:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
-
-	if app.LIRC == nil {
-		return errors.New("Missing LIRC module")
+func Learn(key <-chan gopi.InputEvent) (uint32, bool) {
+	select {
+	case <-time.After(time.Second * 10):
+		// Timeout
+		return 0, false
 	}
+	return 0, true
+}
 
-	// Wait for interrupt
-	app.WaitForSignal()
+func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
+	if device, exists := app.AppFlags.GetString("device"); exists == false || device == "" {
+		return fmt.Errorf("Missing -device flag")
+	} else {
+		fmt.Printf("Learning remote \"%v\", Press CTRL+C when done\n", device)
+
+		device_map := remotes.NewDeviceMap(device)
+		key_chan := make(chan gopi.InputEvent)
+
+		// Populate device map here
+		for k := remotes.KEYCODE_MIN + 1; k < remotes.KEYCODE_MAX; k++ {
+			fmt.Println("Press", k, "on remote keypad or wait for timeout")
+			Learn(key_chan)
+		}
+
+		// Wait for interrupt
+		app.WaitForSignal()
+
+		// Close channel
+		close(key_chan)
+
+		// Write device map
+		device_map.Write(os.Stdout)
+
+		// Finish
+		fmt.Printf("\n\nWritten to file\n")
+	}
 
 	// Finish gracefully
 	done <- gopi.DONE
@@ -72,6 +101,7 @@ func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
 func main() {
 	// Configuration
 	config := gopi.NewAppConfig(CODECS...)
+	config.AppFlags.FlagString("device", "", "Name of device to learn")
 
 	// Run the command line tool
 	os.Exit(gopi.CommandLineTool(config, MainLoop, EventLoop))

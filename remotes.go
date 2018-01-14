@@ -9,7 +9,9 @@
 package remotes
 
 import (
+	"fmt"
 	"math"
+	"time"
 
 	"github.com/djthorpe/gopi"
 )
@@ -17,6 +19,7 @@ import (
 // A coder/decoder for remote
 type Codec interface {
 	gopi.Driver
+	gopi.Publisher
 
 	// Return short name for the codec
 	Name() string
@@ -49,4 +52,61 @@ func (m *MarkSpace) Matches(evt gopi.LIRCEvent) bool {
 		return false
 	}
 	return true
+}
+
+/////////////////////////////////////////////////////////////////////
+// gopi.InputEvent implementation
+
+type RemoteEvent struct {
+	source   Codec
+	ts       time.Duration
+	scancode uint32
+}
+
+func NewRemoteEvent(source Codec, ts time.Duration, scancode uint32) *RemoteEvent {
+	return &RemoteEvent{
+		source:   source,
+		ts:       ts,
+		scancode: scancode,
+	}
+}
+
+func (this *RemoteEvent) Source() gopi.Driver {
+	return this.source
+}
+
+func (*RemoteEvent) Name() string {
+	return "RemoteEvemt"
+}
+
+func (this *RemoteEvent) Timestamp() time.Duration {
+	return this.ts
+}
+
+func (*RemoteEvent) DeviceType() gopi.InputDeviceType {
+	return gopi.INPUT_TYPE_KEYBOARD
+}
+
+func (*RemoteEvent) EventType() gopi.InputEventType {
+	return gopi.INPUT_EVENT_KEYPRESS
+}
+
+func (this *RemoteEvent) Scancode() uint32 {
+	return this.scancode
+}
+
+func (*RemoteEvent) Position() gopi.Point {
+	return gopi.ZeroPoint
+}
+
+func (*RemoteEvent) Relative() gopi.Point {
+	return gopi.ZeroPoint
+}
+
+func (*RemoteEvent) Slot() uint {
+	return 0
+}
+
+func (this *RemoteEvent) String() string {
+	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X source=%v ts=%v }", this.scancode, this.source, this.ts)
 }
