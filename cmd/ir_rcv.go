@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	CODECS             = []string{"remotes/sony12"}
+	CODECS             = []string{"remotes/sony12", "remotes/sony15", "remotes/sony20"}
 	RCV_TIMEOUT uint32 = 100 // ms
 )
 

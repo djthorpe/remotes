@@ -23,15 +23,17 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-// Sony Configuration
+// Sony Configuration - for 12, 15 and 20
 type Codec struct {
 	LIRC gopi.LIRC
+	Type remotes.RemoteCodec
 }
 
 type codec struct {
 	log         gopi.Logger
 	lirc        gopi.LIRC
 	codec_type  remotes.RemoteCodec
+	bit_length  uint
 	cancel      context.CancelFunc
 	done        chan struct{}
 	events      <-chan gopi.Event
@@ -58,7 +60,6 @@ const (
 
 const (
 	TOLERANCE = 25 // 25% tolerance on values
-	LENGTH    = 12 // 12 bits per scancode
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,31 +83,47 @@ var (
 // OPEN AND CLOSE
 
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<remotes.Codec.Sony.Open>{ lirc=%v }", config.LIRC)
+	log.Debug("<remotes.Codec.Sony.Open>{ lirc=%v type=%v }", config.LIRC, config.Type)
 
+	// Check for LIRC
 	if config.LIRC == nil {
 		return nil, gopi.ErrBadParameter
 	}
 
 	this := new(codec)
+
+	// Set log and lirc objects
 	this.log = log
 	this.lirc = config.LIRC
+
+	// Set codec and bit length
+	if bit_length := bitLengthForCodec(config.Type); bit_length == 0 {
+		return nil, gopi.ErrBadParameter
+	} else {
+		this.bit_length = bit_length
+		this.codec_type = config.Type
+	}
+
+	// Set up channels
 	this.done = make(chan struct{})
 	this.events = this.lirc.Subscribe()
 	this.subscribers = evt.NewPubSub(0)
-	this.state = STATE_EXPECT_HEADER_PULSE
-	this.codec_type = remotes.CODEC_SONY12
 
+	// Reset
+	this.Reset()
+
+	// Create background routine
 	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
 		this.cancel = cancel
 		go this.acceptEvents(ctx)
 	}
 
+	// Return success
 	return this, nil
 }
 
 func (this *codec) Close() error {
-	this.log.Debug2("<remotes.Codec.Sony.Close>{ }")
+	this.log.Debug("<remotes.Codec.Sony.Close>{ type=%v }", this.codec_type)
 
 	// Unsubscribe from LIRC signals
 	this.lirc.Unsubscribe(this.events)
@@ -132,7 +149,7 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.Sony>{ type=%v }", this.Type())
+	return fmt.Sprintf("<remotes.Codec.Sony>{ type=%v bit_length=%v }", this.codec_type, this.bit_length)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -211,7 +228,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		if ONEZERO_SPACE.Matches(evt) {
 			this.value = this.value << 1
 			this.length = this.length + 1
-			if this.length == (LENGTH - 1) {
+			if this.length == (this.bit_length - 1) {
 				this.state = STATE_EXPECT_TRAIL
 			} else {
 				this.state = STATE_EXPECT_BIT
@@ -222,7 +239,6 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 	case STATE_EXPECT_TRAIL:
 		if TRAIL_PULSE.Matches(evt) {
 			this.Emit(this.value)
-			fmt.Printf("TRAIL\n")
 			this.state = STATE_EXPECT_REPEAT
 		} else {
 			this.Reset()
@@ -245,7 +261,7 @@ func (this *codec) Send(value uint32, repeats uint) error {
 
 	// Check to make sure the scancode value is less than
 	// or equal to the length and repeats is at least one
-	mask := uint32(1<<LENGTH) - 1
+	mask := uint32(1<<this.bit_length) - 1
 	if value&mask != value || repeats == 0 {
 		return gopi.ErrBadParameter
 	}
@@ -255,9 +271,9 @@ func (this *codec) Send(value uint32, repeats uint) error {
 	pulses = append(pulses, HEADER_PULSE.Value)
 
 	for r := uint(0); r < repeats; r++ {
-		mask := uint32(1) << (LENGTH - 1)
+		mask := uint32(1) << (this.bit_length - 1)
 		pulses = append(pulses, HEADER_SPACE.Value)
-		for i := 0; i < LENGTH; i++ {
+		for i := uint(0); i < this.bit_length; i++ {
 			if value&mask != 0 {
 				pulses = append(pulses, ONE_PULSE.Value)
 			} else {
@@ -285,4 +301,21 @@ func (this *codec) Send(value uint32, repeats uint) error {
 
 	// Perform the sending
 	return this.lirc.PulseSend(pulses)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PRIVATE METHODS
+
+func bitLengthForCodec(codec remotes.RemoteCodec) uint {
+	switch codec {
+	case remotes.CODEC_SONY12:
+		return 12
+	case remotes.CODEC_SONY15:
+		return 15
+	case remotes.CODEC_SONY20:
+		return 20
+	default:
+		return 0
+	}
+
 }
