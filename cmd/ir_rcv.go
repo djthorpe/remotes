@@ -19,11 +19,12 @@ import (
 	// Modules
 	_ "github.com/djthorpe/gopi/sys/hw/linux"
 	_ "github.com/djthorpe/gopi/sys/logger"
+	_ "github.com/djthorpe/remotes/nec"
 	_ "github.com/djthorpe/remotes/sony"
 )
 
 var (
-	CODECS             = []string{"remotes/sony12", "remotes/sony15", "remotes/sony20"}
+	CODECS             = []string{"remotes/sony12", "remotes/sony15", "remotes/sony20", "remotes/nec32"}
 	RCV_TIMEOUT uint32 = 100 // ms
 )
 

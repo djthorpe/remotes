@@ -12,20 +12,22 @@ package nec
 import (
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
+	remotes "github.com/djthorpe/remotes"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // INIT
 
 func init() {
-	// Register remotes/sony
+	// Register remotes/nec32
 	gopi.RegisterModule(gopi.Module{
-		Name:     "remotes/nec",
+		Name:     "remotes/nec32",
 		Requires: []string{"lirc"},
 		Type:     gopi.MODULE_TYPE_OTHER,
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
 			return gopi.Open(Codec{
 				LIRC: app.ModuleInstance("lirc").(gopi.LIRC),
+				Type: remotes.CODEC_NEC32,
 			}, app.Logger)
 		},
 	})

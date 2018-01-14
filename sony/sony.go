@@ -200,7 +200,7 @@ FOR_LOOP:
 }
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.Codec.Sony.Receive>{ evt=%v }", evt)
+	this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v }", this.codec_type, evt)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -257,7 +257,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(value uint32, repeats uint) error {
-	this.log.Debug("<remotes.Codec.Sony.Send>{ value=%X repeats=%v }", value, repeats)
+	this.log.Debug("<remotes.Codec.Sony.Send>{ type=%v value=%X repeats=%v }", this.codec_type, value, repeats)
 
 	// Check to make sure the scancode value is less than
 	// or equal to the length and repeats is at least one

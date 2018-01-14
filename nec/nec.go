@@ -12,29 +12,35 @@ package nec
 import (
 	"context"
 	"fmt"
+	"time"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
+	evt "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-// NEC Configuration
+// NEC Configuration - NEC32 is supported
 type Codec struct {
 	LIRC gopi.LIRC
+	Type remotes.RemoteCodec
 }
 
 type codec struct {
-	log    gopi.Logger
-	lirc   gopi.LIRC
-	cancel context.CancelFunc
-	done   chan struct{}
-	events chan gopi.Event
-	state  state
-	value  uint32
-	length uint
+	log         gopi.Logger
+	lirc        gopi.LIRC
+	codec_type  remotes.RemoteCodec
+	bit_length  uint
+	cancel      context.CancelFunc
+	done        chan struct{}
+	events      <-chan gopi.Event
+	subscribers *evt.PubSub
+	state       state
+	value       uint32
+	length      uint
 }
 
 type state uint32
@@ -52,58 +58,84 @@ const (
 
 const (
 	TOLERANCE = 25 // 25% tolerance on values
-	LENGTH    = 24 // 24 bits per scancode
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // VARIABLES
 
 var (
-	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9098, TOLERANCE)
-	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4418, TOLERANCE)
-	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 643, TOLERANCE)
-	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1608, TOLERANCE)
-	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 483, TOLERANCE)
+	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)
+	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE)
+	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 650, TOLERANCE)
+	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1600, TOLERANCE)
+	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 500, TOLERANCE)
+)
+
+var (
+	timestamp = time.Now()
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
 
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<remotes.Codec.NEC.Open>{ lirc=%v }", config.LIRC)
+	log.Debug("<remotes.Codec.NEC.Open>{ lirc=%v type=%v }", config.LIRC, config.Type)
 
+	// Check for LIRC
 	if config.LIRC == nil {
 		return nil, gopi.ErrBadParameter
 	}
 
 	this := new(codec)
+
+	// Set log and lirc objects
 	this.log = log
 	this.lirc = config.LIRC
+
+	// Set codec and bit length
+	if bit_length := bitLengthForCodec(config.Type); bit_length == 0 {
+		return nil, gopi.ErrBadParameter
+	} else {
+		this.bit_length = bit_length
+		this.codec_type = config.Type
+	}
+
+	// Set up channels
 	this.done = make(chan struct{})
 	this.events = this.lirc.Subscribe()
-	this.state = STATE_EXPECT_HEADER_PULSE
+	this.subscribers = evt.NewPubSub(0)
 
+	// Reset
+	this.Reset()
+
+	// Create background routine
 	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
 		this.cancel = cancel
 		go this.acceptEvents(ctx)
 	}
 
+	// Return success
 	return this, nil
+
 }
 
 func (this *codec) Close() error {
-	this.log.Debug2("<remotes.Codec.NEC.Close>{ }")
+	this.log.Debug("<remotes.Codec.NEC.Close>{ type=%v }", this.codec_type)
 
-	// Unsubscribe
+	// Unsubscribe from LIRC signals
 	this.lirc.Unsubscribe(this.events)
 
 	// Cancel background thread, wait for done signal
 	this.cancel()
 	_ = <-this.done
 
+	// Remove subscribers to this codec
+	this.subscribers.Close()
+
 	// Blank out member variables
 	close(this.done)
 	this.events = nil
+	this.subscribers = nil
 	this.lirc = nil
 	this.done = nil
 
@@ -114,20 +146,35 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.NEC>{}")
+	return fmt.Sprintf("<remotes.Codec.NEC>{ type=%v bit_length=%v }", this.codec_type, this.bit_length)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
-func (this *codec) Name() string {
-	return "nec"
+func (this *codec) Type() remotes.RemoteCodec {
+	return this.codec_type
 }
 
 func (this *codec) Reset() {
 	this.state = STATE_EXPECT_HEADER_PULSE
 	this.value = 0
 	this.length = 0
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PUBLISHER INTERFACE
+
+func (this *codec) Subscribe() <-chan gopi.Event {
+	return this.subscribers.Subscribe()
+}
+
+func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
+	this.subscribers.Unsubscribe(subscriber)
+}
+
+func (this *codec) Emit(scancode uint32) {
+	this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -184,4 +231,24 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 	default:
 		this.Reset()
 	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SENDING
+
+func (this *codec) Send(value uint32, repeats uint) error {
+	return gopi.ErrNotImplemented
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PRIVATE METHODS
+
+func bitLengthForCodec(codec remotes.RemoteCodec) uint {
+	switch codec {
+	case remotes.CODEC_NEC32:
+		return 32
+	default:
+		return 0
+	}
+
 }
