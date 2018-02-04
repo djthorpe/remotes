@@ -21,7 +21,7 @@ dtoverlay=lirc-rpi,gpio_in_pin=22,gpio_out_pin=23
 ```
 
 Your LIRC should then be able to see the device `/dev/lirc0`. The best reference
-for this device is [here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-intro.html).
+for how to interact with the device is [here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-intro.html).
 
 ## Schematic
 
