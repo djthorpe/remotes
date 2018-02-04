@@ -7,10 +7,12 @@ on a Raspberry Pi. In order to use it, you'll need some IR Sending and
 Receiving hardware, which you can build yourself. The schematics and bill of 
 materials are listed below.
 
+__Please note this project is in development__
+
 ## Installation
 
-This software has been tested on Raspbian Jessie. Any linux flavour which
-provides the `lirc` driver should work fine. Firstly, you should add this 
+This software has been tested on Raspbian Jessie. Any linux which is compiled
+with the `lirc` module should work fine. Firstly, you should add this 
 to your `/boot/config.txt` file in order to load the LIRC (Linux Infrared Control) 
 driver, and then reboot your Raspberry Pi:
 
