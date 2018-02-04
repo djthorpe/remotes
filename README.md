@@ -37,9 +37,10 @@ Here is the schematic of the circuit with the bill of materials:
 | R1   |  680Ω ±5% 0.25W       | Carbon Resistor, 0.25W, 5%, 680R |
 | R2   |  10K  ±5% 0.25W       | Carbon Resistor, 0.25W, 5%, 10K |
 | R3   |  36Ω ±1% 0.6W         | Carbon Resistor, 0.6W, 1%, 36R |
-| J1   |  26 Way PCB Heade     | 2.54mm Pitch 26 Way 2 Row Straight PCB Socket |
+| J1   |  26 Way PCB Header    | 2.54mm Pitch 13x2 Rows Straight PCB Socket |
 
-If you want to make a PCB of this design you can [manufacturer one here from Aisler](https://aisler.net/djthorpe/djthorpe/raspberry-pi-ir-sender-receiver).
+If you want to make a PCB of this design you can [manufacturer one here from Aisler](https://aisler.net/djthorpe/djthorpe/raspberry-pi-ir-sender-receiver). Total cost
+including components would cost about £5 / €5 / $5 per unit.
 
 ## Downloading The Software
 
