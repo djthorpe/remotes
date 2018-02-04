@@ -29,14 +29,15 @@ Here is the schematic of the circuit with the bill of materials:
 
 ![IR Schematic](https://raw.githubusercontent.com/djthorpe/remotes/master/etc/ir_schematic.png)
 
-| Part                  | Description |
-| ---- | ---- |
-|  Vishay TSOP38238     | 38kHz IR Receiver, 950nm, 45m Range, Through Hole, 5 x 4.8 x 6.95mm |
-|  Vishay TSAL6200      | 940nm IR LED, 5mm (T-1 3/4) Through Hole package |
-|  Fairchild KSP2222ABU | NPN Transistor, 600 mA, 40 V, 3-Pin TO-92 |
-|  680Ω ±5% 0.25W       | Carbon Resistor, 0.25W ,5%, 680R |
-|  36Ω ±1% 0.6W         | MRS25 Resistor A/P,0.6W,1%,36R |
-|  HV100                | TE Connectivity AMPMODU HV100 Series 2.54mm Pitch 26 Way 2 Row Straight PCB Socket, Through Hole, Solder Termination |
+| Name | Part                  | Description |
+| ---- | ---- | ---- |
+| D1   |  Vishay TSAL6200      | 940nm IR LED, 5mm (T-1 3/4) Through Hole package |
+| D2   |  Vishay TSOP38238     | 38kHz IR Receiver, 950nm, 45m Range, Through Hole, 5 x 4.8 x 6.95mm |
+| Q1   |  Fairchild KSP2222ABU | NPN Transistor, 600 mA, 40 V, 3-Pin TO-92 |
+| R1   |  680Ω ±5% 0.25W       | Carbon Resistor, 0.25W, 5%, 680R |
+| R2   |  10K  ±5% 0.25W       | Carbon Resistor, 0.25W, 5%, 10K |
+| R3   |  36Ω ±1% 0.6W         | Carbon Resistor, 0.6W, 1%, 36R |
+| J1   |  26 Way PCB Heade     | 2.54mm Pitch 26 Way 2 Row Straight PCB Socket |
 
 If you want to make a PCB of this design you can [manufacturer one here from Aisler](https://aisler.net/djthorpe/djthorpe/raspberry-pi-ir-sender-receiver).
 
