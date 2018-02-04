@@ -48,6 +48,9 @@ You'll need a working Go Language environment to compile and install the softwar
 you can use the following command to install the binaries:
 
 ```
-bash% go install github.com/djthorpe/remotes
+bash% go get github.com/djthorpe/remotes/./...
 ```
+
+Currently this installs two binaries, `ir_learn` and `ir_recv`.
+
 
