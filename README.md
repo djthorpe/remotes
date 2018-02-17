@@ -17,7 +17,7 @@ to your `/boot/config.txt` file in order to load the LIRC (Linux Infrared Contro
 driver, and then reboot your Raspberry Pi:
 
 ```
-dtoverlay=lirc-rpi,gpio_in_pin=22,gpio_out_pin=23
+dtoverlay=lirc-rpi,gpio_in_pin=15,gpio_out_pin=16
 ```
 
 Your LIRC should then be able to see the device `/dev/lirc0`. The best reference
