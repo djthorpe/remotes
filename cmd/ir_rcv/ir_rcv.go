@@ -23,12 +23,15 @@ import (
 	// Remotes
 	_ "github.com/djthorpe/remotes/appletv"
 	_ "github.com/djthorpe/remotes/nec"
+	_ "github.com/djthorpe/remotes/panasonic"
+	_ "github.com/djthorpe/remotes/rc5"
 	_ "github.com/djthorpe/remotes/sony"
 )
 
 var (
-	//	CODECS             = []string{"remotes/sony12", "remotes/sony15", "remotes/sony20", "remotes/nec16", "remotes/nec32"}
-	CODECS             = []string{"remotes/appletv"}
+	//CODECS = []string{"remotes/panasonic", "remotes/appletv", "remotes/nec32", "remotes/sony12"}
+	//CODECS             = []string{ "remotes/sony15", "remotes/sony20", }
+	CODECS             = []string{"remotes/rc5"}
 	RCV_TIMEOUT uint32 = 100 // ms
 )
 
@@ -68,29 +71,35 @@ func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
 		}
 	}
 
-	appletv := app.ModuleInstance("remotes/appletv").(remotes.Codec).Subscribe()
-	/*sony12 := app.ModuleInstance("remotes/sony12").(remotes.Codec).Subscribe()
-	sony15 := app.ModuleInstance("remotes/sony15").(remotes.Codec).Subscribe()
-	sony20 := app.ModuleInstance("remotes/sony20").(remotes.Codec).Subscribe()*/
-	/*nec32 := app.ModuleInstance("remotes/nec32").(remotes.Codec).Subscribe()*/
+	// appletv := app.ModuleInstance("remotes/appletv").(remotes.Codec).Subscribe()
+	// nec32 := app.ModuleInstance("remotes/nec32").(remotes.Codec).Subscribe()
+	// sony12 := app.ModuleInstance("remotes/sony12").(remotes.Codec).Subscribe()
+	// panasonic := app.ModuleInstance("remotes/panasonic").(remotes.Codec).Subscribe()
+	//sony15 := app.ModuleInstance("remotes/sony15").(remotes.Codec).Subscribe()
+	//sony20 := app.ModuleInstance("remotes/sony20").(remotes.Codec).Subscribe()
+	rc5 := app.ModuleInstance("remotes/rc5").(remotes.Codec).Subscribe()
 
 	PrintHeader()
 
 FOR_LOOP:
 	for {
 		select {
-		case evt := <-appletv:
+		// case evt := <-appletv:
+		// 	PrintEvent(evt)
+		// case evt := <-nec32:
+		// 	PrintEvent(evt)
+		// case evt := <-sony12:
+		// 	PrintEvent(evt)
+		// case evt := <-panasonic:
+		// 	PrintEvent(evt)
+		case evt := <-rc5:
 			PrintEvent(evt)
-			/*		case evt := <-sony12:
-						PrintEvent(evt)
-					case evt := <-sony15:
-						PrintEvent(evt)
-					case evt := <-sony20:
-						PrintEvent(evt)
-					case evt := <-nec32:
-						PrintEvent(evt)*/
 		case <-done:
 			break FOR_LOOP
+			// case evt := <-sony15:
+			// 	PrintEvent(evt)
+			// case evt := <-sony20:
+			// 	PrintEvent(evt)
 		}
 	}
 

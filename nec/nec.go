@@ -18,6 +18,7 @@ import (
 	gopi "github.com/djthorpe/gopi"
 	evt "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
+	appletv "github.com/djthorpe/remotes/appletv"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -184,7 +185,9 @@ func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
 
 func (this *codec) Emit(value uint32, repeat bool) {
 	if scancode, device, err := codeForCodec(this.codec_type, value); err != nil {
-		this.log.Warn("Emit: %v", err)
+		if err != gopi.ErrBadParameter {
+			this.log.Warn("Emit: %v", err)
+		}
 	} else {
 		this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode, device, repeat))
 	}
@@ -210,7 +213,6 @@ FOR_LOOP:
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
 	this.log.Debug2("<remotes.Codec.NEC.Receive>{ evt=%v }", evt)
-	this.log.Debug("starting evt=%v state=%v", evt, this.state)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -288,7 +290,6 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 	default:
 		this.Reset()
 	}
-	this.log.Debug("  ending state=%v", this.state)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,7 +314,12 @@ func bitLengthForCodec(codec remotes.RemoteCodec) uint {
 }
 
 func codeForCodec(codec remotes.RemoteCodec, value uint32) (uint32, uint32, error) {
-	fmt.Printf("codec=%v code=0x%08X\n", codec, value)
+	/* If we receive an AppleTV code, then return badparameter */
+	if (value & 0xFFFF0000 >> 16) == appletv.APPLETV_CODE {
+		return 0, 0, gopi.ErrBadParameter
+	}
+
+	/* Or else deal with non-AppleTV */
 	switch codec {
 	case remotes.CODEC_NEC16:
 		if value&0xFFFF0000 != 0 {
@@ -326,7 +332,6 @@ func codeForCodec(codec remotes.RemoteCodec, value uint32) (uint32, uint32, erro
 		// Lower 16 bits are the command - top 8 bits of the word are
 		// the inverse of the bottom 8 bits, flip them around
 		value2 := value ^ 0x000000FF
-		fmt.Printf("v=%08X ^v=%08X\n", value, value^0xFFFFFFFF)
 		if (value2 & 0x000000FF) != (value & 0x0000FF00 >> 8) {
 			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
 		}
