@@ -41,6 +41,7 @@ const (
 	CODEC_RC6_6A_32
 	CODEC_RC6_MCE
 	CODEC_SHARP
+	CODEC_APPLETV
 )
 
 /////////////////////////////////////////////////////////////////////
@@ -96,6 +97,8 @@ func (c RemoteCodec) String() string {
 		return "CODEC_RC6_MCE"
 	case CODEC_SHARP:
 		return "CODEC_SHARP"
+	case CODEC_APPLETV:
+		return "CODEC_APPLETV"
 	default:
 		return "[?? Invalid RemoteCodec value]"
 	}

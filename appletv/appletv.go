@@ -1,13 +1,13 @@
 /*
 	Go Language Raspberry Pi Interface
-    (c) Copyright David Thorpe 2016-2018
-    All Rights Reserved
+	(c) Copyright David Thorpe 2018
+	All Rights Reserved
 
 	Documentation http://djthorpe.github.io/gopi/
 	For Licensing and Usage information, please see LICENSE.md
 */
 
-package nec
+package appletv
 
 import (
 	"context"
@@ -23,16 +23,13 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-// NEC Configuration - NEC32 is supported
 type Codec struct {
 	LIRC gopi.LIRC
-	Type remotes.RemoteCodec
 }
 
 type codec struct {
 	log         gopi.Logger
 	lirc        gopi.LIRC
-	codec_type  remotes.RemoteCodec
 	bit_length  uint
 	cancel      context.CancelFunc
 	done        chan struct{}
@@ -61,7 +58,8 @@ const (
 )
 
 const (
-	TOLERANCE = 25 // 25% tolerance on values
+	TOLERANCE    = 25     // 25% tolerance on values
+	APPLETV_CODE = 0x77E1 // The code used by the AppleTV remote to identify itself
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +86,7 @@ var (
 // OPEN AND CLOSE
 
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<remotes.Codec.NEC.Open>{ lirc=%v type=%v }", config.LIRC, config.Type)
+	log.Debug("<remotes.Codec.AppleTV.Open>{ lirc=%v }", config.LIRC)
 
 	// Check for LIRC
 	if config.LIRC == nil {
@@ -96,18 +94,9 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	}
 
 	this := new(codec)
-
-	// Set log and lirc objects
 	this.log = log
 	this.lirc = config.LIRC
-
-	// Set codec and bit length
-	if bit_length := bitLengthForCodec(config.Type); bit_length == 0 {
-		return nil, gopi.ErrBadParameter
-	} else {
-		this.bit_length = bit_length
-		this.codec_type = config.Type
-	}
+	this.bit_length = 32
 
 	// Set up channels
 	this.done = make(chan struct{})
@@ -129,7 +118,7 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 }
 
 func (this *codec) Close() error {
-	this.log.Debug("<remotes.Codec.NEC.Close>{ type=%v }", this.codec_type)
+	this.log.Debug("<remotes.Codec.AppleTV.Close>{ }")
 
 	// Unsubscribe from LIRC signals
 	this.lirc.Unsubscribe(this.events)
@@ -155,14 +144,14 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.NEC>{ type=%v bit_length=%v }", this.codec_type, this.bit_length)
+	return fmt.Sprintf("<remotes.Codec.AppleTV>{}")
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
 func (this *codec) Type() remotes.RemoteCodec {
-	return this.codec_type
+	return remotes.CODEC_APPLETV
 }
 
 func (this *codec) Reset() {
@@ -183,8 +172,11 @@ func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
 }
 
 func (this *codec) Emit(value uint32, repeat bool) {
-	if scancode, device, err := codeForCodec(this.codec_type, value); err != nil {
-		this.log.Warn("Emit: %v", err)
+	if scancode, device, err := codeForCodec(value); err != nil {
+		// We ignore BadParameter errors
+		if err != gopi.ErrBadParameter {
+			this.log.Warn("Emit: %v", err)
+		}
 	} else {
 		this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode, device, repeat))
 	}
@@ -209,8 +201,7 @@ FOR_LOOP:
 }
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.Codec.NEC.Receive>{ evt=%v }", evt)
-	this.log.Debug("starting evt=%v state=%v", evt, this.state)
+	this.log.Debug2("<remotes.Codec.AppleTV.Receive>{ evt=%v state=%v }", evt, this.state)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -288,7 +279,6 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 	default:
 		this.Reset()
 	}
-	this.log.Debug("  ending state=%v", this.state)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -301,40 +291,14 @@ func (this *codec) Send(value uint32, repeats uint) error {
 ////////////////////////////////////////////////////////////////////////////////
 // PRIVATE METHODS
 
-func bitLengthForCodec(codec remotes.RemoteCodec) uint {
-	switch codec {
-	case remotes.CODEC_NEC16:
-		return 16
-	case remotes.CODEC_NEC32:
-		return 32
-	default:
-		return 0
-	}
-}
-
-func codeForCodec(codec remotes.RemoteCodec, value uint32) (uint32, uint32, error) {
-	fmt.Printf("codec=%v code=0x%08X\n", codec, value)
-	switch codec {
-	case remotes.CODEC_NEC16:
-		if value&0xFFFF0000 != 0 {
-			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
-		}
-		scan := value & 0x000000FF
-		device := value & 0x0000FF00 >> 8
-		return scan, device, nil
-	case remotes.CODEC_NEC32:
-		// Lower 16 bits are the command - top 8 bits of the word are
-		// the inverse of the bottom 8 bits, flip them around
-		value2 := value ^ 0x000000FF
-		fmt.Printf("v=%08X ^v=%08X\n", value, value^0xFFFFFFFF)
-		if (value2 & 0x000000FF) != (value & 0x0000FF00 >> 8) {
-			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
-		}
-		scan := value & 0x000000FF
-		device := value & 0xFFFF0000 >> 16
-		return scan, device, nil
-	default:
+func codeForCodec(value uint32) (uint32, uint32, error) {
+	remote := value & 0xFFFF0000 >> 16
+	scancode := value & 0x0000FF00 >> 8
+	device := value & 0x000000FF
+	if remote != APPLETV_CODE {
 		return 0, 0, gopi.ErrBadParameter
+	} else {
+		return scancode, device, nil
 	}
 }
 

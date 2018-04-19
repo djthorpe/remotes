@@ -20,18 +20,20 @@ import (
 // gopi.InputEvent implementation
 
 type RemoteEvent struct {
-	source     Codec
-	ts         time.Duration
-	devicecode uint32
-	scancode   uint32
+	source   Codec
+	ts       time.Duration
+	device   uint32
+	scancode uint32
+	repeat   bool
 }
 
-func NewRemoteEvent(source Codec, ts time.Duration, scancode, devicecode uint32) *RemoteEvent {
+func NewRemoteEvent(source Codec, ts time.Duration, scancode, device uint32, repeat bool) *RemoteEvent {
 	return &RemoteEvent{
-		source:     source,
-		ts:         ts,
-		scancode:   scancode,
-		devicecode: devicecode,
+		source:   source,
+		ts:       ts,
+		scancode: scancode,
+		device:   device,
+		repeat:   repeat,
 	}
 }
 
@@ -51,8 +53,12 @@ func (*RemoteEvent) DeviceType() gopi.InputDeviceType {
 	return gopi.INPUT_TYPE_REMOTE
 }
 
-func (*RemoteEvent) EventType() gopi.InputEventType {
-	return gopi.INPUT_EVENT_KEYPRESS
+func (this *RemoteEvent) EventType() gopi.InputEventType {
+	if this.repeat {
+		return gopi.INPUT_EVENT_KEYREPEAT
+	} else {
+		return gopi.INPUT_EVENT_KEYPRESS
+	}
 }
 
 func (this *RemoteEvent) Codec() RemoteCodec {
@@ -63,8 +69,8 @@ func (this *RemoteEvent) Scancode() uint32 {
 	return this.scancode
 }
 
-func (this *RemoteEvent) Devicecode() uint32 {
-	return this.devicecode
+func (this *RemoteEvent) Device() uint32 {
+	return this.device
 }
 
 func (*RemoteEvent) Position() gopi.Point {
@@ -80,5 +86,5 @@ func (*RemoteEvent) Slot() uint {
 }
 
 func (this *RemoteEvent) String() string {
-	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X devicecode=0x%X source=%v ts=%v }", this.scancode, this.devicecode, this.source, this.ts)
+	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X device=0x%X repeat=%v source=%v ts=%v }", this.scancode, this.device, this.repeat, this.source, this.ts)
 }
