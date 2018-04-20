@@ -55,8 +55,8 @@ type Codec interface {
 	// Return type for the codec
 	Type() RemoteCodec
 
-	// Send Scancode
-	Send(value uint32, repeats uint) error
+	// Send scancode
+	Send(device uint32, scancode uint32, repeats uint) error
 }
 
 /////////////////////////////////////////////////////////////////////

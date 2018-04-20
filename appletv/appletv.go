@@ -284,7 +284,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 ////////////////////////////////////////////////////////////////////////////////
 // SENDING
 
-func (this *codec) Send(value uint32, repeats uint) error {
+func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 	return gopi.ErrNotImplemented
 }
 

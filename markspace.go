@@ -24,10 +24,16 @@ type MarkSpace struct {
 }
 
 func NewMarkSpace(t gopi.LIRCType, value, tolerance uint32) *MarkSpace {
+	this := &MarkSpace{Type: t}
+	this.Set(value, tolerance)
+	return this
+}
+
+func (m *MarkSpace) Set(value, tolerance uint32) {
 	delta := float64(value) * float64(tolerance) / 100.0
-	min := math.Max(0, float64(value)-delta)
-	max := float64(value) + delta
-	return &MarkSpace{Type: t, Value: value, Min: uint32(min), Max: uint32(max)}
+	m.Min = uint32(math.Max(0, float64(value)-delta))
+	m.Max = uint32(float64(value) + delta)
+	m.Value = value
 }
 
 func (m *MarkSpace) Matches(evt gopi.LIRCEvent) bool {
