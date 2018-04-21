@@ -21,6 +21,7 @@ import (
 
 	// Protocol Buffer definitions
 	pb "github.com/djthorpe/remotes/protobuf/remotes"
+	ptype "github.com/golang/protobuf/ptypes"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +66,7 @@ type Service struct {
 type service struct {
 	log    gopi.Logger
 	done   *evt.PubSub
-	merger *evt.EventMerger
+	merger evt.EventMerger
 	codecs []remotes.Codec
 }
 
@@ -146,12 +147,12 @@ FOR_LOOP:
 	for {
 		select {
 		case evt := <-input_events:
-			reply := toProtobufInputEvent() // TODO: convert evt into protobuf
+			reply := toProtobufInputEvent(evt.(gopi.InputEvent))
 			if err := stream.Send(reply); err != nil {
 				this.log.Warn("Receive: error sending: %v: closing request", err)
 				break FOR_LOOP
 			} else {
-				this.log.Info("Sent: %v", evt)
+				this.log.Info("Sent: %v", reply)
 			}
 		case <-cancel_requests:
 			break FOR_LOOP
@@ -176,6 +177,21 @@ func (this *service) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // PROTOBUF CONVERSION
 
-func toProtobufInputEvent() *pb.InputEvent {
-	return &pb.InputEvent{}
+func toProtobufInputEvent(evt gopi.InputEvent) *pb.InputEvent {
+	return &pb.InputEvent{
+		Ts:         ptype.DurationProto(evt.Timestamp()),
+		DeviceType: pb.InputDeviceType(evt.DeviceType()),
+		EventType:  pb.InputEventType(evt.EventType()),
+		Scancode:   evt.Scancode(),
+		Position:   toProtobufPoint(evt.Position()),
+		Relative:   toProtobufPoint(evt.Relative()),
+		Slot:       uint32(evt.Slot()),
+	}
+}
+
+func toProtobufPoint(pt gopi.Point) *pb.Point {
+	return &pb.Point{
+		X: pt.X,
+		Y: pt.Y,
+	}
 }

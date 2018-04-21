@@ -81,6 +81,10 @@ func (*RemoteEvent) Relative() gopi.Point {
 	return gopi.ZeroPoint
 }
 
+func (*RemoteEvent) Keycode() gopi.KeyCode {
+	return gopi.KEYCODE_NONE
+}
+
 func (*RemoteEvent) Slot() uint {
 	return 0
 }

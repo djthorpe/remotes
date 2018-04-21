@@ -23,12 +23,12 @@ message EmptyReply { }
 // ENUMS
 
 enum InputDeviceType {
-	INPUT_TYPE_NONE = 0;
-	INPUT_TYPE_KEYBOARD = 1;
-	INPUT_TYPE_MOUSE = 2;
-	INPUT_TYPE_TOUCHSCREEN = 4;
-	INPUT_TYPE_JOYSTICK = 8;
-	INPUT_TYPE_REMOTE = 10;
+	INPUT_TYPE_NONE = 0x0000;
+	INPUT_TYPE_KEYBOARD = 0x0001;
+	INPUT_TYPE_MOUSE = 0x0002;
+	INPUT_TYPE_TOUCHSCREEN = 0x0004;
+	INPUT_TYPE_JOYSTICK = 0x0008;
+	INPUT_TYPE_REMOTE = 0x0010;
 }
 
 enum InputEventType {
@@ -57,7 +57,7 @@ message Point {
 message InputEvent {
     google.protobuf.Duration ts = 1;
     InputDeviceType device_type = 2;
-    InputDeviceType event_type = 3;
+    InputEventType event_type = 3;
     uint32 scancode = 4;
     Point position = 5;
     Point relative = 6;
