@@ -1,0 +1,27 @@
+
+syntax = "proto3";
+package mutablelogic.remotes;
+option go_package = "remotes";
+
+import "google/protobuf/timestamp.proto";
+
+/////////////////////////////////////////////////////////////////////
+// SERVICES
+
+service Remotes {
+    // Receive remotes
+    rpc Receive (EmptyRequest) returns (stream InputEvent);
+}
+
+/////////////////////////////////////////////////////////////////////
+// EMPTY REQUEST AND REPLY
+
+message EmptyRequest { }
+message EmptyReply { }
+
+/////////////////////////////////////////////////////////////////////
+// INPUT EVENT
+
+message InputEvent {
+    google.protobuf.Timestamp ts = 1;
+}
