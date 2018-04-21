@@ -12,18 +12,16 @@ package service
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	// Frameworks
-	"github.com/djthorpe/gopi"
+	gopi "github.com/djthorpe/gopi"
 	evt "github.com/djthorpe/gopi/util/event"
+	remotes "github.com/djthorpe/remotes"
 
 	// Protocol Buffer definitions
 	pb "github.com/djthorpe/remotes/protobuf/remotes"
-	ptypes "github.com/golang/protobuf/ptypes"
-
-	// Codecs
-
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,7 +36,21 @@ func init() {
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
 			return gopi.Open(Service{
 				Server: app.ModuleInstance("rpc/server").(gopi.RPCServer),
+				App:    app,
 			}, app.Logger)
+		},
+		Run: func(app *gopi.AppInstance, driver gopi.Driver) error {
+			// Register codecs with driver. Codecs have OTHER as module type
+			// and name starting with "remotes/"
+			for _, module := range gopi.ModulesByType(gopi.MODULE_TYPE_OTHER) {
+				if strings.HasPrefix(module.Name, "remotes/") {
+					if codec, ok := app.ModuleInstance(module.Name).(remotes.Codec); ok && codec != nil {
+						driver.(*service).registerCodec(codec)
+					}
+				}
+			}
+			// Success
+			return nil
 		},
 	})
 }
@@ -48,10 +60,11 @@ func init() {
 
 type Service struct {
 	Server gopi.RPCServer
+	App    *gopi.AppInstance
 }
 
 type service struct {
-	log gopi.Logger
+	log  gopi.Logger
 	done *evt.PubSub
 }
 
@@ -64,14 +77,10 @@ func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
 
 	this := new(service)
 	this.log = log
-	this.done = evt.NewPubSub(0)
+	this.done = evt.NewPubSub(1)
 
 	// Register service with server
 	config.Server.Register(this)
-
-	// Obtain all codecs (they are all of type other but start with rmeotes/ in the name
-	modules := gopi.ModulesByType(gopi.MODULE_TYPE_OTHER)
-	log.Info("modules=%v",modules)
 
 	// Success
 	return this, nil
@@ -89,15 +98,20 @@ func (this *service) Close() error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// SEND DONE SIGNAL
+// REGISTER CODECS
 
-func (this *service) Done() {
-	this.log.Debug2("<grpc.service.remotes>Done{}")
-	this.done.Emit(evt.NullEvent)
+func (this *service) registerCodec(codec remotes.Codec) {
+	this.log.Debug2("<grpc.service.remotes>RegisterCodec{ codec=%v }", codec)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// RPC SERVICE INTERFACE
+// RPC SERVICE INTERFACE IMPLEMENTATION
+
+func (this *service) CancelRequests() error {
+	this.log.Debug2("<grpc.service.remotes>CancelRequests{}")
+	this.done.Emit(evt.NullEvent)
+	return nil
+}
 
 func (this *service) GRPCHook() reflect.Value {
 	// ensure we conform to pb.RemotesServer
@@ -105,8 +119,10 @@ func (this *service) GRPCHook() reflect.Value {
 	return reflect.ValueOf(pb.RegisterRemotesServer)
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// RPC SERVICE REQUESTS
+
 func (this *service) Receive(_ *pb.EmptyRequest, stream pb.Remotes_ReceiveServer) error {
-	// Create a timer which ticks once every 5 seconds
 	timer := time.Tick(5 * time.Second)
 
 	// Get a channel we will use for breaking the loop
@@ -125,12 +141,12 @@ FOR_LOOP:
 				this.log.Info("Sent: %v", reply)
 			}
 		case <-done:
-			break FOR_LOOP			
+			break FOR_LOOP
 		}
 	}
 
 	// Unsubscribe from done signal
-	this.done.Unsubscribe()
+	this.done.Unsubscribe(done)
 
 	// Return success
 	return nil
@@ -146,9 +162,6 @@ func (this *service) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // PROTOBUF CONVERSION
 
-func toProtobufInputEvent(evt gopi.InputEvent) *pb.InputEvent {
-	return &pb.InputEvent{
-		Ts: ptypes.TimestampProto()
-	}
+func toProtobufInputEvent() *pb.InputEvent {
+	return &pb.InputEvent{}
 }
-
