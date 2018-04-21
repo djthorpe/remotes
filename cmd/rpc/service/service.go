@@ -111,7 +111,7 @@ func (this *service) Close() error {
 func (this *service) registerCodec(codec remotes.Codec) {
 	this.log.Debug2("<grpc.service.remotes>RegisterCodec{ codec=%v }", codec)
 
-	// Append codecs and subscibe
+	// Append codecs and subscribe
 	this.codecs = append(this.codecs, codec)
 	this.merger.Add(codec.Subscribe())
 }
@@ -121,6 +121,7 @@ func (this *service) registerCodec(codec remotes.Codec) {
 
 func (this *service) CancelRequests() error {
 	this.log.Debug2("<grpc.service.remotes>CancelRequests{}")
+	// Cancel any streaming requests
 	this.done.Emit(evt.NullEvent)
 	return nil
 }
@@ -135,31 +136,30 @@ func (this *service) GRPCHook() reflect.Value {
 // RPC SERVICE REQUESTS
 
 func (this *service) Receive(_ *pb.EmptyRequest, stream pb.Remotes_ReceiveServer) error {
-	// Subscribe to the merger channel
+	// Subscribe to the merger channel and the channel used for
+	// breaking the loop
 	input_events := this.merger.Subscribe()
-
-	// Get a channel we will use for breaking the loop
-	done := this.done.Subscribe()
+	cancel_requests := this.done.Subscribe()
 
 	// Send until loop is broken
 FOR_LOOP:
 	for {
 		select {
 		case evt := <-input_events:
-			reply := toProtobufInputEvent() // TODO
+			reply := toProtobufInputEvent() // TODO: convert evt into protobuf
 			if err := stream.Send(reply); err != nil {
 				this.log.Warn("Receive: error sending: %v: closing request", err)
 				break FOR_LOOP
 			} else {
 				this.log.Info("Sent: %v", evt)
 			}
-		case <-done:
+		case <-cancel_requests:
 			break FOR_LOOP
 		}
 	}
 
-	// Unsubscribe
-	this.done.Unsubscribe(done)
+	// Unsubscribe from channels
+	this.done.Unsubscribe(cancel_requests)
 	this.merger.Unsubscribe(input_events)
 
 	// Return success
