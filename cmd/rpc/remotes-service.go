@@ -22,13 +22,16 @@ import (
 
 	// RPC Services
 	_ "github.com/djthorpe/remotes/cmd/rpc/service"
+
+	// Remote Codecs
+	_ "github.com/djthorpe/remotes/codec/appletv"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("service/remotes:grpc")
+	config := gopi.NewAppConfig("service/remotes:grpc", "remotes/appletv")
 
 	// Set the RPCServiceRecord for server discovery
 	config.Service = "remotes"

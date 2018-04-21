@@ -1,9 +1,9 @@
 
 syntax = "proto3";
-package mutablelogic.remotes;
+package mutablelogic;
 option go_package = "remotes";
 
-import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 /////////////////////////////////////////////////////////////////////
 // SERVICES
@@ -20,8 +20,46 @@ message EmptyRequest { }
 message EmptyReply { }
 
 /////////////////////////////////////////////////////////////////////
+// ENUMS
+
+enum InputDeviceType {
+	INPUT_TYPE_NONE = 0;
+	INPUT_TYPE_KEYBOARD = 1;
+	INPUT_TYPE_MOUSE = 2;
+	INPUT_TYPE_TOUCHSCREEN = 4;
+	INPUT_TYPE_JOYSTICK = 8;
+	INPUT_TYPE_REMOTE = 10;
+}
+
+enum InputEventType {
+    INPUT_EVENT_NONE = 0x0000;
+    INPUT_EVENT_KEYPRESS = 0x0001;
+	INPUT_EVENT_KEYRELEASE = 0x0002;
+	INPUT_EVENT_KEYREPEAT = 0x0003;
+	INPUT_EVENT_ABSPOSITION = 0x0004;
+	INPUT_EVENT_RELPOSITION = 0x0005;
+	INPUT_EVENT_TOUCHPRESS = 0x0006;
+	INPUT_EVENT_TOUCHRELEASE = 0x0007;
+	INPUT_EVENT_TOUCHPOSITION = 0x0008;    
+}
+
+/////////////////////////////////////////////////////////////////////
+// GEOMETRY
+
+message Point {
+    float x = 1;
+    float y = 2;
+}
+
+/////////////////////////////////////////////////////////////////////
 // INPUT EVENT
 
 message InputEvent {
-    google.protobuf.Timestamp ts = 1;
+    google.protobuf.Duration ts = 1;
+    InputDeviceType device_type = 2;
+    InputDeviceType event_type = 3;
+    uint32 scancode = 4;
+    Point position = 5;
+    Point relative = 6;
+    uint32 slot = 7;
 }

@@ -212,6 +212,9 @@ FOR_LOOP:
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
 	this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v }", this.codec_type, evt)
+	if this.codec_type == remotes.CODEC_SONY12 {
+		this.log.Debug("<remotes.Codec.Sony.Receive>{ type=%v evt=%v state=%v }", this.codec_type, evt, this.state)
+	}
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -243,8 +246,8 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		if ONEZERO_SPACE.Matches(evt) {
 			this.value = this.value << 1
 			this.length = this.length + 1
-			if this.length == (this.bit_length - 1) {
-				this.state = STATE_EXPECT_TRAIL
+			if this.length == this.bit_length {
+				this.state = STATE_EXPECT_REPEAT
 				this.duration += evt.Value()
 			} else {
 				this.state = STATE_EXPECT_BIT

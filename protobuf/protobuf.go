@@ -27,5 +27,6 @@ package protobuf
 	instead:
 
 	rpi# sudo apt install protobuf-compiler
+	rpi# sudo apt install libprotobuf-dev
 	rpi# go get -u github.com/golang/protobuf/protoc-gen-go
 */

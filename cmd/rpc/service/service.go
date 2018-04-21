@@ -16,10 +16,14 @@ import (
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
+	evt "github.com/djthorpe/gopi/util/event"
 
 	// Protocol Buffer definitions
 	pb "github.com/djthorpe/remotes/protobuf/remotes"
 	ptypes "github.com/golang/protobuf/ptypes"
+
+	// Codecs
+
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,6 +52,7 @@ type Service struct {
 
 type service struct {
 	log gopi.Logger
+	done *evt.PubSub
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,9 +64,14 @@ func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
 
 	this := new(service)
 	this.log = log
+	this.done = evt.NewPubSub(0)
 
 	// Register service with server
 	config.Server.Register(this)
+
+	// Obtain all codecs (they are all of type other but start with rmeotes/ in the name
+	modules := gopi.ModulesByType(gopi.MODULE_TYPE_OTHER)
+	log.Info("modules=%v",modules)
 
 	// Success
 	return this, nil
@@ -70,8 +80,20 @@ func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
 func (this *service) Close() error {
 	this.log.Debug("<grpc.service.remotes>Close{}")
 
+	// Close done
+	this.done.Close()
+	this.done = nil
+
 	// Success
 	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SEND DONE SIGNAL
+
+func (this *service) Done() {
+	this.log.Debug2("<grpc.service.remotes>Done{}")
+	this.done.Emit(evt.NullEvent)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,20 +108,29 @@ func (this *service) GRPCHook() reflect.Value {
 func (this *service) Receive(_ *pb.EmptyRequest, stream pb.Remotes_ReceiveServer) error {
 	// Create a timer which ticks once every 5 seconds
 	timer := time.Tick(5 * time.Second)
+
+	// Get a channel we will use for breaking the loop
+	done := this.done.Subscribe()
+
 	// Send until loop is broken
 FOR_LOOP:
 	for {
 		select {
 		case <-timer:
-			reply := toInputEvent()
+			reply := toProtobufInputEvent()
 			if err := stream.Send(reply); err != nil {
 				this.log.Warn("Receive: error sending: %v: closing request", err)
 				break FOR_LOOP
 			} else {
 				this.log.Info("Sent: %v", reply)
 			}
+		case <-done:
+			break FOR_LOOP			
 		}
 	}
+
+	// Unsubscribe from done signal
+	this.done.Unsubscribe()
 
 	// Return success
 	return nil
@@ -115,8 +146,9 @@ func (this *service) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // PROTOBUF CONVERSION
 
-func toInputEvent() *pb.InputEvent {
+func toProtobufInputEvent(evt gopi.InputEvent) *pb.InputEvent {
 	return &pb.InputEvent{
-		Ts: ptypes.TimestampNow(),
+		Ts: ptypes.TimestampProto()
 	}
 }
+
