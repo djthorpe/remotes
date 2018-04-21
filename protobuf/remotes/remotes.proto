@@ -9,8 +9,14 @@ import "google/protobuf/duration.proto";
 // SERVICES
 
 service Remotes {
-    // Receive remotes
-    rpc Receive (EmptyRequest) returns (stream InputEvent);
+    // Enumerate codecs
+    rpc Codecs (EmptyRequest) returns (CodecsReply);
+
+    // Send a remote scancode
+    rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
+
+    // Receive remote events
+    rpc Receive (EmptyRequest) returns (stream RemotesReply);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -58,8 +64,34 @@ message InputEvent {
     google.protobuf.Duration ts = 1;
     InputDeviceType device_type = 2;
     InputEventType event_type = 3;
-    uint32 scancode = 4;
-    Point position = 5;
-    Point relative = 6;
-    uint32 slot = 7;
+    uint32 scancode = 5;
+    uint32 device = 6;
+    Point position = 7;
+    Point relative = 8;
+    uint32 slot = 9;
+}
+
+/////////////////////////////////////////////////////////////////////
+// REMOTE REPLY
+
+message RemotesReply {
+  InputEvent event = 1;
+  string codec = 2;
+}
+
+/////////////////////////////////////////////////////////////////////
+// SEND SCANCODE REQUEST
+
+message SendScancodeRequest {
+  uint32 codec = 1;
+  uint32 device = 2;
+  uint32 scancode = 3;
+  uint32 repeats = 4;
+}
+
+/////////////////////////////////////////////////////////////////////
+// CODECS REPLY
+
+message CodecsReply {
+    map<uint32, string> codec = 1;
 }

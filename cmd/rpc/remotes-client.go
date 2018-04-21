@@ -16,6 +16,8 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
+	"syscall"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -26,13 +28,28 @@ import (
 
 	// Protocol Buffer definitions
 	pb "github.com/djthorpe/remotes/protobuf/remotes"
+	ptype "github.com/golang/protobuf/ptypes"
 )
+
+////////////////////////////////////////////////////////////////////////////////
+// TYPES
+
+type MethodFunc func(service pb.RemotesClient, done <-chan struct{}) error
 
 ////////////////////////////////////////////////////////////////////////////////
 // GLOBAL VARIABLES
 
 var (
-	start chan pb.RemotesClient
+	start  chan pb.RemotesClient
+	method MethodFunc
+)
+
+var (
+	methods = map[string]MethodFunc{
+		"receive": Receive,
+		"codecs":  Codecs,
+		"send":    Send,
+	}
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,6 +84,18 @@ func RemotesService(app *gopi.AppInstance) (pb.RemotesClient, error) {
 }
 
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
+	// There should be zero or one argument
+	if args := app.AppFlags.Args(); len(args) > 1 {
+		done <- gopi.DONE
+		return gopi.ErrHelp
+	} else if len(args) == 0 {
+		method = Receive
+	} else if method_, exists := methods[args[0]]; exists == false {
+		done <- gopi.DONE
+		return gopi.ErrBadParameter
+	} else {
+		method = method_
+	}
 
 	// Create a start channel used to pass the service on indicating
 	// the start of processing
@@ -81,7 +110,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 	}
 
 	// Wait for signal
-	app.Logger.Debug("Waiting for CTRL+C")
+	app.Logger.Info("Waiting for CTRL+C")
 	app.WaitForSignal()
 
 	// Finish gracefully
@@ -90,8 +119,27 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Run RPC methods
+
+func PrintEvent(once *sync.Once, reply *pb.RemotesReply) {
+	once.Do(func() {
+		fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "Codec", "Event", "Device", "Scancode", "Timestamp")
+		fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------")
+	})
+	duration, _ := ptype.Duration(reply.Event.Ts)
+	fmt.Printf("%-20s %-25s 0x%08X 0x%08X %-10s\n", reply.Codec, reply.Event.EventType, reply.Event.Device, reply.Event.Scancode, duration)
+}
+
+func PrintCodecs(reply *pb.CodecsReply) {
+	fmt.Printf("%-20s %-5s\n", "Codec", "Key")
+	fmt.Printf("%-20s %-5s\n", "-------------------", "-----")
+	for k, v := range reply.Codec {
+		fmt.Printf("%-20s %v\n", v, k)
+	}
+}
 
 func Receive(service pb.RemotesClient, done <-chan struct{}) error {
+	var once sync.Once
 
 	// Create the context with cancel
 	ctx, cancel := context.WithCancel(context.Background())
@@ -112,7 +160,7 @@ func Receive(service pb.RemotesClient, done <-chan struct{}) error {
 			} else if err != nil {
 				return err
 			} else {
-				fmt.Printf("InputEvent=%v\n", input_event)
+				PrintEvent(&once, input_event)
 			}
 		}
 	}
@@ -121,13 +169,46 @@ func Receive(service pb.RemotesClient, done <-chan struct{}) error {
 	return nil
 }
 
+func Codecs(service pb.RemotesClient, done <-chan struct{}) error {
+	ctx := context.Background()
+	if reply, err := service.Codecs(ctx, &pb.EmptyRequest{}); err != nil {
+		return err
+	} else {
+		PrintCodecs(reply)
+		return nil
+	}
+}
+
+func Send(service pb.RemotesClient, done <-chan struct{}) error {
+	return gopi.ErrNotImplemented
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Run method and cancel main thread when done
+
+func Cancel() error {
+	if process, err := os.FindProcess(os.Getpid()); err != nil {
+		return err
+	} else if err := process.Signal(syscall.SIGTERM); err != nil {
+		return err
+	} else {
+		return nil
+	}
+}
+
 func Run(app *gopi.AppInstance, done <-chan struct{}) error {
 
 FOR_LOOP:
 	for {
 		select {
 		case service := <-start:
-			return Receive(service, done)
+			if err := method(service, done); err != nil {
+				Cancel()
+				return err
+			} else {
+				Cancel()
+				break FOR_LOOP
+			}
 		case <-done:
 			break FOR_LOOP
 		}
@@ -137,10 +218,27 @@ FOR_LOOP:
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Bootstrap
+
+func MethodNames() []string {
+	v := make([]string, 0, len(methods))
+	for k := range methods {
+		v = append(v, k)
+	}
+	return v
+}
 
 func main() {
 	// Create the configuration
 	config := gopi.NewAppConfig("rpc/clientconn")
+
+	// Set usage function
+	config.AppFlags.SetUsageFunc(func(flags *gopi.Flags) {
+		fmt.Fprintf(os.Stderr, "Syntax:\n")
+		fmt.Fprintf(os.Stderr, "  %v <flags> (%v)\n", flags.Name(), strings.Join(MethodNames(), "|"))
+		fmt.Fprintf(os.Stderr, "\nWhere flags are:\n")
+		flags.PrintDefaults()
+	})
 
 	// Run the command line tool
 	os.Exit(gopi.CommandLineTool(config, Main, Run))

@@ -18,7 +18,7 @@ import (
 	gopi "github.com/djthorpe/gopi"
 	evt "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
-	appletv "github.com/djthorpe/remotes/appletv"
+	appletv "github.com/djthorpe/remotes/codec/appletv"
 )
 
 ////////////////////////////////////////////////////////////////////////////////

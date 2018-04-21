@@ -10,6 +10,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -67,7 +68,7 @@ type service struct {
 	log    gopi.Logger
 	done   *evt.PubSub
 	merger evt.EventMerger
-	codecs []remotes.Codec
+	codecs map[remotes.RemoteCodec]remotes.Codec
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +81,7 @@ func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
 	this := new(service)
 	this.log = log
 	this.done = evt.NewPubSub(1)
-	this.codecs = make([]remotes.Codec, 0, 10)
+	this.codecs = make(map[remotes.RemoteCodec]remotes.Codec, 10)
 	this.merger = evt.NewEventMerger()
 
 	// Register service with server
@@ -112,9 +113,13 @@ func (this *service) Close() error {
 func (this *service) registerCodec(codec remotes.Codec) {
 	this.log.Debug2("<grpc.service.remotes>RegisterCodec{ codec=%v }", codec)
 
-	// Append codecs and subscribe
-	this.codecs = append(this.codecs, codec)
-	this.merger.Add(codec.Subscribe())
+	// Append codec and add to merged channel
+	if _, exists := this.codecs[codec.Type()]; exists == false {
+		this.codecs[codec.Type()] = codec
+		this.merger.Add(codec.Subscribe())
+	} else {
+		this.log.Warn("RegisterCodec: Ignoring second codec with same type %v", codec.Type())
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -147,12 +152,13 @@ FOR_LOOP:
 	for {
 		select {
 		case evt := <-input_events:
-			reply := toProtobufInputEvent(evt.(gopi.InputEvent))
-			if err := stream.Send(reply); err != nil {
+			if reply := toProtobufRemotesReply(evt.(gopi.InputEvent)); reply == nil {
+				this.log.Warn("Receive: unable to form a reply from input event, ignoring")
+			} else if err := stream.Send(reply); err != nil {
 				this.log.Warn("Receive: error sending: %v: closing request", err)
 				break FOR_LOOP
 			} else {
-				this.log.Info("Sent: %v", reply)
+				this.log.Debug2("Receive: sent %v", reply)
 			}
 		case <-cancel_requests:
 			break FOR_LOOP
@@ -167,6 +173,22 @@ FOR_LOOP:
 	return nil
 }
 
+func (this *service) SendScancode(ctx context.Context, in *pb.SendScancodeRequest) (*pb.EmptyReply, error) {
+	if codec, exists := this.codecs[remotes.RemoteCodec(in.Codec)]; exists == false {
+		this.log.Warn("SendScancode: Bad request: Invalid codec")
+		return nil, gopi.ErrBadParameter
+	} else if err := codec.Send(in.Device, in.Scancode, uint(in.Repeats)); err != nil {
+		return nil, err
+	} else {
+		// Success
+		return &pb.EmptyReply{}, nil
+	}
+}
+
+func (this *service) Codecs(ctx context.Context, in *pb.EmptyRequest) (*pb.CodecsReply, error) {
+	return toProtobufCodecsReply(this.codecs), nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
@@ -177,11 +199,35 @@ func (this *service) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // PROTOBUF CONVERSION
 
+func toProtobufCodecsReply(codecs map[remotes.RemoteCodec]remotes.Codec) *pb.CodecsReply {
+	reply := &pb.CodecsReply{
+		Codec: make(map[uint32]string),
+	}
+	for k, v := range codecs {
+		reply.Codec[uint32(k)] = fmt.Sprint(v.Type())
+	}
+	return reply
+}
+
+func toProtobufRemotesReply(evt gopi.InputEvent) *pb.RemotesReply {
+	if codec, ok := evt.Source().(remotes.Codec); ok && codec != nil {
+		return &pb.RemotesReply{
+			Event: toProtobufInputEvent(evt),
+			Codec: fmt.Sprint(codec.Type()),
+		}
+	} else {
+		return &pb.RemotesReply{
+			Event: toProtobufInputEvent(evt),
+		}
+	}
+}
+
 func toProtobufInputEvent(evt gopi.InputEvent) *pb.InputEvent {
 	return &pb.InputEvent{
 		Ts:         ptype.DurationProto(evt.Timestamp()),
 		DeviceType: pb.InputDeviceType(evt.DeviceType()),
 		EventType:  pb.InputEventType(evt.EventType()),
+		Device:     evt.Device(),
 		Scancode:   evt.Scancode(),
 		Position:   toProtobufPoint(evt.Position()),
 		Relative:   toProtobufPoint(evt.Relative()),
