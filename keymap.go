@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	// Frameworks
 )
+
+/////////////////////////////////////////////////////////////////////
+// TYPES
 
 type Remote struct {
 	XMLName xml.Name  `xml:"remote"`
@@ -32,9 +34,15 @@ type KeyMap struct {
 	Name     string     `xml:"name"`
 }
 
+/////////////////////////////////////////////////////////////////////
+// GLOBAL VARIABLES AND CONSTANTS
+
 var (
 	ErrInvalidKey = errors.New("Invalid Key")
 )
+
+/////////////////////////////////////////////////////////////////////
+// PUBLIC METHODS
 
 // NewRemote returns a new empty remote
 func NewRemote(codec CodecType, device uint32) *Remote {
@@ -46,6 +54,23 @@ func NewRemote(codec CodecType, device uint32) *Remote {
 	return this
 }
 
+// RemoteFromFile returns a loaded remote
+func RemoteFromFile(filename string) (*Remote, error) {
+	var this Remote
+	if fh, err := os.Open(filename); err != nil {
+		return nil, err
+	} else {
+		defer fh.Close()
+		dec := xml.NewDecoder(fh)
+		if err := dec.Decode(&this); err != nil {
+			return nil, err
+		} else {
+			return &this, nil
+		}
+	}
+}
+
+// SetName names the device
 func (this *Remote) SetName(name string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -55,6 +80,7 @@ func (this *Remote) SetName(name string) {
 	}
 }
 
+// SetKey assigns a keycode for a scancode
 func (this *Remote) SetKey(keycode RemoteCode, scancode uint32, name string) error {
 	name = strings.TrimSpace(name)
 	if keyname := this.defaultKeyName(keycode); keyname == "" {
@@ -70,8 +96,23 @@ func (this *Remote) SetKey(keycode RemoteCode, scancode uint32, name string) err
 	return nil
 }
 
-func (this *Remote) Save() error {
-	enc := xml.NewEncoder(os.Stdout)
+// Save the information to a file
+func (this *Remote) SaveToFile(filepath string) error {
+	var fh *os.File
+
+	/* Open file */
+	if filepath == "" || filepath == "-" {
+		fh = os.Stdout
+	} else {
+		var err error
+		if fh, err = os.Create(filepath); err != nil {
+			return err
+		}
+	}
+	defer fh.Close()
+
+	/* Encode XML */
+	enc := xml.NewEncoder(fh)
 	enc.Indent("", "  ")
 	if err := enc.Encode(this); err != nil {
 		return err
@@ -79,6 +120,9 @@ func (this *Remote) Save() error {
 		return nil
 	}
 }
+
+/////////////////////////////////////////////////////////////////////
+// PRIVATE METHODS
 
 func (this *Remote) defaultName() string {
 	if this.Device == 0 {
