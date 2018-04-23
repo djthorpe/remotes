@@ -35,7 +35,7 @@ import (
 
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("service/remotes:grpc", "remotes/appletv", "remotes/panasonic", "remotes/nec16", "remotes/nec32", "remotes/sony12", "remotes/sony15")
+	config := gopi.NewAppConfig("service/remotes:grpc", "remotes/appletv", "remotes/panasonic", "remotes/nec32", "remotes/sony12", "remotes/sony15")
 
 	// Set the RPCServiceRecord for server discovery
 	config.Service = "remotes"

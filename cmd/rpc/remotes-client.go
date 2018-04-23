@@ -34,7 +34,7 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-type MethodFunc func(service pb.RemotesClient, done <-chan struct{}) error
+type MethodFunc func(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{}) error
 
 ////////////////////////////////////////////////////////////////////////////////
 // GLOBAL VARIABLES
@@ -97,10 +97,6 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		method = method_
 	}
 
-	// Create a start channel used to pass the service on indicating
-	// the start of processing
-	start = make(chan pb.RemotesClient)
-
 	if service, err := RemotesService(app); err != nil {
 		done <- gopi.DONE
 		return err
@@ -138,11 +134,19 @@ func PrintCodecs(reply *pb.CodecsReply) {
 	}
 }
 
-func Receive(service pb.RemotesClient, done <-chan struct{}) error {
+func Context(app *gopi.AppInstance) (context.Context, context.CancelFunc) {
+	if timeout, _ := app.AppFlags.GetDuration("rpc.timeout"); timeout == 0 {
+		return context.WithCancel(context.Background())
+	} else {
+		return context.WithTimeout(context.Background(), timeout)
+	}
+}
+
+func Receive(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{}) error {
 	var once sync.Once
 
 	// Create the context with cancel
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := Context(app)
 
 	// Call cancel in the background when done is received
 	go func() {
@@ -169,8 +173,16 @@ func Receive(service pb.RemotesClient, done <-chan struct{}) error {
 	return nil
 }
 
-func Codecs(service pb.RemotesClient, done <-chan struct{}) error {
-	ctx := context.Background()
+func Codecs(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{}) error {
+	// Create the context with cancel
+	ctx, cancel := Context(app)
+
+	// Call cancel in the background when done is received
+	go func() {
+		<-done
+		cancel()
+	}()
+
 	if reply, err := service.Codecs(ctx, &pb.EmptyRequest{}); err != nil {
 		return err
 	} else {
@@ -179,8 +191,40 @@ func Codecs(service pb.RemotesClient, done <-chan struct{}) error {
 	}
 }
 
-func Send(service pb.RemotesClient, done <-chan struct{}) error {
-	return gopi.ErrNotImplemented
+func Send(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{}) error {
+	// Create the context with cancel
+	ctx, cancel := Context(app)
+
+	// Call cancel in the background when done is received
+	go func() {
+		<-done
+		cancel()
+	}()
+
+	/* Get command line arguments */
+	if codec, exists := app.AppFlags.GetString("codec"); exists == false {
+		return fmt.Errorf("Missing -codec argument")
+	} else {
+		codec = "CODEC_" + strings.ToUpper(codec)
+		device, _ := app.AppFlags.GetUint("device")
+		scancode, _ := app.AppFlags.GetUint("code")
+		repeats, _ := app.AppFlags.GetUint("repeats")
+		if codec_value, exists := pb.CodecType_value[codec]; exists == false {
+			return fmt.Errorf("Unknown codec: %v", codec)
+		} else {
+			app.Logger.Debug("Send codec=%v device=0x%08X scancode=0x%08X repeats=%v", pb.CodecType(codec_value), device, scancode, repeats)
+			if _, err := service.SendScancode(ctx, &pb.SendScancodeRequest{
+				Codec:    pb.CodecType(codec_value),
+				Device:   uint32(device),
+				Scancode: uint32(scancode),
+				Repeats:  uint32(repeats),
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -202,7 +246,7 @@ FOR_LOOP:
 	for {
 		select {
 		case service := <-start:
-			if err := method(service, done); err != nil {
+			if err := method(app, service, done); err != nil {
 				Cancel()
 				return err
 			} else {
@@ -232,6 +276,12 @@ func main() {
 	// Create the configuration
 	config := gopi.NewAppConfig("rpc/clientconn")
 
+	// Set send flags
+	config.AppFlags.FlagString("codec", "", "Send Codec")
+	config.AppFlags.FlagUint("device", 0, "Send device")
+	config.AppFlags.FlagUint("code", 0, "Send scancode")
+	config.AppFlags.FlagUint("repeats", 0, "Number of send repetitions")
+
 	// Set usage function
 	config.AppFlags.SetUsageFunc(func(flags *gopi.Flags) {
 		fmt.Fprintf(os.Stderr, "Syntax:\n")
@@ -239,6 +289,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nWhere flags are:\n")
 		flags.PrintDefaults()
 	})
+
+	// Create a start channel used to pass the service on indicating
+	// the start of processing
+	start = make(chan pb.RemotesClient)
 
 	// Run the command line tool
 	os.Exit(gopi.CommandLineTool(config, Main, Run))

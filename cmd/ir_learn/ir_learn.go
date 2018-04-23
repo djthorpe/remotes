@@ -8,87 +8,37 @@
 package main
 
 import (
-	"errors"
-	"fmt"
 	"os"
-	"time"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
 	"github.com/djthorpe/remotes"
 
 	// Modules
-	_ "github.com/djthorpe/gopi/sys/hw/linux"
 	_ "github.com/djthorpe/gopi/sys/logger"
-	_ "github.com/djthorpe/remotes/sony"
 )
-
-var (
-	CODECS = []string{"remotes/sony"}
-)
-
-////////////////////////////////////////////////////////////////////////////////
-
-func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
-	sony := app.ModuleInstance("remotes/sony").(remotes.Codec)
-	if sony == nil {
-		return errors.New("Missing Sony Codec")
-	}
-	edge := sony.Subscribe()
-
-FOR_LOOP:
-	for {
-		select {
-		case evt := <-edge:
-			fmt.Println(evt)
-		case <-done:
-			break FOR_LOOP
-		}
-	}
-
-	// Unsubscribe from edges
-	sony.Unsubscribe(edge)
-
-	return nil
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-func Learn(key <-chan gopi.InputEvent) (uint32, bool) {
-	select {
-	case <-time.After(time.Second * 10):
-		// Timeout
-		return 0, false
-	}
-	return 0, true
-}
 
 func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
-	if device, exists := app.AppFlags.GetString("device"); exists == false || device == "" {
-		return fmt.Errorf("Missing -device flag")
-	} else {
-		fmt.Printf("Learning remote \"%v\", Press CTRL+C when done\n", device)
+	// Create a new remote keymap
+	device := remotes.NewRemote(remotes.CODEC_NEC32, 0)
 
-		device_map := remotes.NewDeviceMap(device)
-		key_chan := make(chan gopi.InputEvent)
+	// Set keys
+	if err := device.SetKey(remotes.KEYCODE_POWER_TOGGLE, 0x40, ""); err != nil {
+		return err
+	}
+	if err := device.SetKey(remotes.KEYCODE_VOLUME_UP, 0x80, ""); err != nil {
+		return err
+	}
+	if err := device.SetKey(remotes.KEYCODE_VOLUME_DOWN, 0x00, ""); err != nil {
+		return err
+	}
+	if err := device.SetKey(remotes.KEYCODE_PLAY, 0x10, ""); err != nil {
+		return err
+	}
 
-		// Populate device map here
-		for k := remotes.KEYCODE_MIN + 1; k < remotes.KEYCODE_MAX; k++ {
-			fmt.Println("Press", k, "on remote keypad or wait for timeout")
-			Learn(key_chan)
-		}
-
-		// Wait for interrupt
-		app.WaitForSignal()
-
-		// Close channel
-		close(key_chan)
-
-		// Write device map
-		device_map.Write(os.Stdout)
-
-		// Finish
-		fmt.Printf("\n\nWritten to file\n")
+	// Save file
+	if err := device.Save(); err != nil {
+		return err
 	}
 
 	// Finish gracefully
@@ -100,9 +50,9 @@ func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
 
 func main() {
 	// Configuration
-	config := gopi.NewAppConfig(CODECS...)
+	config := gopi.NewAppConfig()
 	config.AppFlags.FlagString("device", "", "Name of device to learn")
 
 	// Run the command line tool
-	os.Exit(gopi.CommandLineTool(config, MainLoop, EventLoop))
+	os.Exit(gopi.CommandLineTool(config, MainLoop))
 }

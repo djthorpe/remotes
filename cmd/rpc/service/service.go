@@ -175,7 +175,7 @@ FOR_LOOP:
 
 func (this *service) SendScancode(ctx context.Context, in *pb.SendScancodeRequest) (*pb.EmptyReply, error) {
 	if codec, exists := this.codecs[remotes.CodecType(in.Codec)]; exists == false {
-		this.log.Warn("SendScancode: Bad request: Invalid codec")
+		this.log.Warn("SendScancode: Bad request: Invalid codec (%v)", remotes.CodecType(in.Codec))
 		return nil, gopi.ErrBadParameter
 	} else if err := codec.Send(in.Device, in.Scancode, uint(in.Repeats)); err != nil {
 		return nil, err

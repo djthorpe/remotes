@@ -19,19 +19,6 @@ import (
 // INIT
 
 func init() {
-	// Register remotes/nec16
-	gopi.RegisterModule(gopi.Module{
-		Name:     "remotes/nec16",
-		Requires: []string{"lirc"},
-		Type:     gopi.MODULE_TYPE_OTHER,
-		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
-			return gopi.Open(Codec{
-				LIRC: app.ModuleInstance("lirc").(gopi.LIRC),
-				Type: remotes.CODEC_NEC16,
-			}, app.Logger)
-		},
-	})
-
 	// Register remotes/nec32
 	gopi.RegisterModule(gopi.Module{
 		Name:     "remotes/nec32",

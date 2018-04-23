@@ -69,11 +69,13 @@ const (
 // VARIABLES
 
 var (
-	HEADER_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)   // 9ms
-	HEADER_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE)   // 4.5ms
-	BIT_PULSE     = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 650, TOLERANCE)    // 650ns
-	ONE_SPACE     = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1600, TOLERANCE)   // 1.6ms
-	ZERO_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 500, TOLERANCE)    // 500ns
+	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE) // 9ms
+	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE) // 4.5ms
+	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)  // 650ns
+	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1688, TOLERANCE) // 1.6ms
+	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 562, TOLERANCE)  // 500ns
+	TRAIL_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)  // 650ns
+
 	REPEAT_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 35000, TOLERANCE)  // 35ms
 	REPEAT_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)   // 9ms
 	REPEAT_SPACE2 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 2250, TOLERANCE)   // 2.25ms
@@ -184,6 +186,7 @@ func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
 }
 
 func (this *codec) Emit(value uint32, repeat bool) {
+	this.log.Debug("<remotes.Codec.NEC.Receive>Emit{ value=0x%08X repeat=%v }", value, repeat)
 	if scancode, device, err := codeForCodec(this.codec_type, value); err != nil {
 		if err != gopi.ErrBadParameter {
 			this.log.Warn("Emit: %v", err)
@@ -296,7 +299,57 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
-	return gopi.ErrNotImplemented
+	this.log.Debug("<remotes.Codec.NEC>Send{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
+
+	if device&0xFFFFFF00 != 0 {
+		this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
+		return gopi.ErrBadParameter
+	}
+	if scancode&0xFFFFFF00 != 0 {
+		this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
+		return gopi.ErrBadParameter
+	}
+
+	pulses := make([]uint32, 0, 100)
+
+	// 9ms leading pulse burst and 4.5ms space
+	pulses = append(pulses, HEADER_PULSE.Value, HEADER_SPACE.Value)
+
+	// device and scancode
+	pulses = this.sendbyte(pulses, uint8(device))
+	pulses = this.sendbyte(pulses, uint8(device^0xFF))
+	pulses = this.sendbyte(pulses, uint8(scancode))
+	pulses = this.sendbyte(pulses, uint8(scancode^0xFF))
+
+	// A final 562.5µs pulse
+	pulses = append(pulses, TRAIL_PULSE.Value)
+
+	// If there is one or more repeats, then do these
+	if repeats > 0 {
+		pulses = append(pulses, REPEAT_SPACE.Value)
+		for i := uint(0); i < repeats; i++ {
+			pulses = append(pulses, REPEAT_PULSE.Value, REPEAT_SPACE2.Value)
+		}
+		// A final 562.5µs pulse
+		pulses = append(pulses, TRAIL_PULSE.Value)
+	}
+
+	// Perform the pulse send
+	return this.lirc.PulseSend(pulses)
+}
+
+func (this *codec) sendbyte(pulses []uint32, value uint8) []uint32 {
+	for i := 0; i < 8; i++ {
+		pulses = append(pulses, BIT_PULSE.Value)
+		if value&0x80 == 0 { // Send zero
+			pulses = append(pulses, ZERO_SPACE.Value)
+		} else {
+			// Send one
+			pulses = append(pulses, ONE_SPACE.Value)
+		}
+		value <<= 1
+	}
+	return pulses
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -304,8 +357,6 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 
 func bitLengthForCodec(codec remotes.CodecType) uint {
 	switch codec {
-	case remotes.CODEC_NEC16:
-		return 16
 	case remotes.CODEC_NEC32:
 		return 32
 	default:
@@ -321,22 +372,13 @@ func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error)
 
 	/* Or else deal with non-AppleTV */
 	switch codec {
-	case remotes.CODEC_NEC16:
-		if value&0xFFFF0000 != 0 {
-			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
-		}
-		scan := value & 0x000000FF
-		device := value & 0x0000FF00 >> 8
-		return scan, device, nil
 	case remotes.CODEC_NEC32:
-		// Lower 16 bits are the command - top 8 bits of the word are
-		// the inverse of the bottom 8 bits, flip them around
-		value2 := value ^ 0x000000FF
-		if (value2 & 0x000000FF) != (value & 0x0000FF00 >> 8) {
-			return 0, 0, fmt.Errorf("Invalid scancode 0x%08X for codec %v", value, codec)
+		value2 := value ^ 0x00FF00FF
+		if (value2 & 0x00FF00FF) != (value & 0xFF00FF00 >> 8) {
+			return 0, 0, fmt.Errorf("Invalid scancode or device 0x%08X for codec %v", value, codec)
 		}
-		scan := value & 0x000000FF
-		device := value & 0xFFFF0000 >> 16
+		scan := value & 0x0000FF00 >> 8
+		device := value & 0xFF000000 >> 24
 		return scan, device, nil
 	default:
 		return 0, 0, gopi.ErrBadParameter

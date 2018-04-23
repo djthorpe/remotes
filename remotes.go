@@ -24,7 +24,8 @@ type (
 // CONSTANTS
 
 const (
-	CODEC_RC5 CodecType = iota
+	CODEC_NONE CodecType = iota
+	CODEC_RC5
 	CODEC_RC5X_20
 	CODEC_RC5_SZ
 	CODEC_JVC
@@ -64,6 +65,8 @@ type Codec interface {
 
 func (c CodecType) String() string {
 	switch c {
+	case CODEC_NONE:
+		return "CODEC_NONE"
 	case CODEC_RC5:
 		return "CODEC_RC5"
 	case CODEC_RC5X_20:
@@ -103,6 +106,6 @@ func (c CodecType) String() string {
 	case CODEC_PANASONIC:
 		return "CODEC_PANASONIC"
 	default:
-		return "[?? Invalid RemoteCodec value]"
+		return "[?? Invalid CodecType value]"
 	}
 }

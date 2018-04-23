@@ -213,7 +213,7 @@ FOR_LOOP:
 func (this *codec) receive(evt gopi.LIRCEvent) {
 	this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v }", this.codec_type, evt)
 	if this.codec_type == remotes.CODEC_SONY12 {
-		this.log.Debug("<remotes.Codec.Sony.Receive>{ type=%v evt=%v state=%v }", this.codec_type, evt, this.state)
+		this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v state=%v }", this.codec_type, evt, this.state)
 	}
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
