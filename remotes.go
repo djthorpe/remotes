@@ -16,15 +16,15 @@ import (
 // TYPES
 
 type (
-	RemoteCode  gopi.KeyCode
-	RemoteCodec uint
+	RemoteCode gopi.KeyCode
+	CodecType  uint
 )
 
 /////////////////////////////////////////////////////////////////////
 // CONSTANTS
 
 const (
-	CODEC_RC5 RemoteCodec = iota
+	CODEC_RC5 CodecType = iota
 	CODEC_RC5X_20
 	CODEC_RC5_SZ
 	CODEC_JVC
@@ -53,7 +53,7 @@ type Codec interface {
 	gopi.Publisher
 
 	// Return type for the codec
-	Type() RemoteCodec
+	Type() CodecType
 
 	// Send scancode
 	Send(device uint32, scancode uint32, repeats uint) error
@@ -62,7 +62,7 @@ type Codec interface {
 /////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
-func (c RemoteCodec) String() string {
+func (c CodecType) String() string {
 	switch c {
 	case CODEC_RC5:
 		return "CODEC_RC5"

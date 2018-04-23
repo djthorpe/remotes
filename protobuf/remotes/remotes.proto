@@ -9,14 +9,14 @@ import "google/protobuf/duration.proto";
 // SERVICES
 
 service Remotes {
-    // Enumerate codecs
+    // Return array of codecs supported
     rpc Codecs (EmptyRequest) returns (CodecsReply);
 
     // Send a remote scancode
     rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
 
     // Receive remote events
-    rpc Receive (EmptyRequest) returns (stream RemotesReply);
+    rpc Receive (EmptyRequest) returns (stream ReceiveReply);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -49,6 +49,28 @@ enum InputEventType {
 	INPUT_EVENT_TOUCHPOSITION = 0x0008;    
 }
 
+enum CodecType {
+    CODEC_RC5 = 0;
+	CODEC_RC5X_20 = 1;
+	CODEC_RC5_SZ = 2;
+	CODEC_JVC = 3;
+	CODEC_SONY12 = 4;
+	CODEC_SONY15 = 5;
+	CODEC_SONY20 = 6;
+	CODEC_NEC16 = 7;
+	CODEC_NEC32 = 8;
+	CODEC_NECX = 9;
+	CODEC_SANYO = 10;
+	CODEC_RC6_0 = 11;
+	CODEC_RC6_6A_20 = 12;
+	CODEC_RC6_6A_24 = 13;
+	CODEC_RC6_6A_32 = 14;
+	CODEC_RC6_MCE = 15;
+	CODEC_SHARP = 16;
+	CODEC_APPLETV = 17;
+	CODEC_PANASONIC = 18;
+}
+
 /////////////////////////////////////////////////////////////////////
 // GEOMETRY
 
@@ -72,18 +94,18 @@ message InputEvent {
 }
 
 /////////////////////////////////////////////////////////////////////
-// REMOTE REPLY
+// RECEIVE REPLY
 
-message RemotesReply {
+message ReceiveReply {
   InputEvent event = 1;
-  string codec = 2;
+  CodecType codec = 2;
 }
 
 /////////////////////////////////////////////////////////////////////
 // SEND SCANCODE REQUEST
 
 message SendScancodeRequest {
-  uint32 codec = 1;
+  CodecType codec = 1;
   uint32 device = 2;
   uint32 scancode = 3;
   uint32 repeats = 4;
@@ -93,5 +115,5 @@ message SendScancodeRequest {
 // CODECS REPLY
 
 message CodecsReply {
-    map<uint32, string> codec = 1;
+    repeated CodecType codec = 1;
 }

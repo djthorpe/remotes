@@ -8,6 +8,11 @@
 
 package remotes
 
+/*
+	This file implements the event which is emitted on remote key
+	invocation
+*/
+
 import (
 	"fmt"
 	"time"
@@ -61,7 +66,7 @@ func (this *RemoteEvent) EventType() gopi.InputEventType {
 	}
 }
 
-func (this *RemoteEvent) Codec() RemoteCodec {
+func (this *RemoteEvent) Codec() CodecType {
 	return this.source.Type()
 }
 
@@ -90,5 +95,5 @@ func (*RemoteEvent) Slot() uint {
 }
 
 func (this *RemoteEvent) String() string {
-	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X device=0x%X repeat=%v source=%v ts=%v }", this.scancode, this.device, this.repeat, this.source, this.ts)
+	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X device=0x%X repeat=%v codec=%v ts=%v source=%v }", this.scancode, this.device, this.repeat, this.Codec(), this.ts, this.source)
 }

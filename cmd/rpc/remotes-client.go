@@ -121,7 +121,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 ////////////////////////////////////////////////////////////////////////////////
 // Run RPC methods
 
-func PrintEvent(once *sync.Once, reply *pb.RemotesReply) {
+func PrintEvent(once *sync.Once, reply *pb.ReceiveReply) {
 	once.Do(func() {
 		fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "Codec", "Event", "Device", "Scancode", "Timestamp")
 		fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------")
@@ -131,10 +131,10 @@ func PrintEvent(once *sync.Once, reply *pb.RemotesReply) {
 }
 
 func PrintCodecs(reply *pb.CodecsReply) {
-	fmt.Printf("%-20s %-5s\n", "Codec", "Key")
-	fmt.Printf("%-20s %-5s\n", "-------------------", "-----")
-	for k, v := range reply.Codec {
-		fmt.Printf("%-20s %v\n", v, k)
+	fmt.Printf("%-20s\n", "Codec")
+	fmt.Printf("%-20s\n", "-------------------")
+	for _, v := range reply.Codec {
+		fmt.Printf("%-20s\n", v)
 	}
 }
 

@@ -27,13 +27,13 @@ import (
 // Sony Configuration - for 12, 15 and 20
 type Codec struct {
 	LIRC gopi.LIRC
-	Type remotes.RemoteCodec
+	Type remotes.CodecType
 }
 
 type codec struct {
 	log         gopi.Logger
 	lirc        gopi.LIRC
-	codec_type  remotes.RemoteCodec
+	codec_type  remotes.CodecType
 	bit_length  uint
 	cancel      context.CancelFunc
 	done        chan struct{}
@@ -145,7 +145,7 @@ func (this *codec) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
-func (this *codec) Type() remotes.RemoteCodec {
+func (this *codec) Type() remotes.CodecType {
 	return this.codec_type
 }
 
@@ -255,6 +255,6 @@ func (this *codec) Send(value uint32, repeats uint) error {
 ////////////////////////////////////////////////////////////////////////////////
 // PRIVATE METHODS
 
-func codeForCodec(codec remotes.RemoteCodec, value uint32) (uint32, uint32, error) {
+func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
 	return 0, 0, gopi.ErrBadParameter
 }

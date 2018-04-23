@@ -28,13 +28,14 @@ import (
 	_ "github.com/djthorpe/remotes/codec/appletv"
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
+	_ "github.com/djthorpe/remotes/codec/sony"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("service/remotes:grpc", "remotes/appletv", "remotes/panasonic", "remotes/nec16", "remotes/nec32")
+	config := gopi.NewAppConfig("service/remotes:grpc", "remotes/appletv", "remotes/panasonic", "remotes/nec16", "remotes/nec32", "remotes/sony12", "remotes/sony15")
 
 	// Set the RPCServiceRecord for server discovery
 	config.Service = "remotes"

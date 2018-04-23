@@ -68,7 +68,7 @@ type service struct {
 	log    gopi.Logger
 	done   *evt.PubSub
 	merger evt.EventMerger
-	codecs map[remotes.RemoteCodec]remotes.Codec
+	codecs map[remotes.CodecType]remotes.Codec
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,7 +81,7 @@ func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
 	this := new(service)
 	this.log = log
 	this.done = evt.NewPubSub(1)
-	this.codecs = make(map[remotes.RemoteCodec]remotes.Codec, 10)
+	this.codecs = make(map[remotes.CodecType]remotes.Codec, 10)
 	this.merger = evt.NewEventMerger()
 
 	// Register service with server
@@ -174,7 +174,7 @@ FOR_LOOP:
 }
 
 func (this *service) SendScancode(ctx context.Context, in *pb.SendScancodeRequest) (*pb.EmptyReply, error) {
-	if codec, exists := this.codecs[remotes.RemoteCodec(in.Codec)]; exists == false {
+	if codec, exists := this.codecs[remotes.CodecType(in.Codec)]; exists == false {
 		this.log.Warn("SendScancode: Bad request: Invalid codec")
 		return nil, gopi.ErrBadParameter
 	} else if err := codec.Send(in.Device, in.Scancode, uint(in.Repeats)); err != nil {
@@ -199,24 +199,24 @@ func (this *service) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // PROTOBUF CONVERSION
 
-func toProtobufCodecsReply(codecs map[remotes.RemoteCodec]remotes.Codec) *pb.CodecsReply {
+func toProtobufCodecsReply(codecs map[remotes.CodecType]remotes.Codec) *pb.CodecsReply {
 	reply := &pb.CodecsReply{
-		Codec: make(map[uint32]string),
+		Codec: make([]pb.CodecType, 0, len(codecs)),
 	}
-	for k, v := range codecs {
-		reply.Codec[uint32(k)] = fmt.Sprint(v.Type())
+	for k := range codecs {
+		reply.Codec = append(reply.Codec, pb.CodecType(k))
 	}
 	return reply
 }
 
-func toProtobufRemotesReply(evt gopi.InputEvent) *pb.RemotesReply {
+func toProtobufRemotesReply(evt gopi.InputEvent) *pb.ReceiveReply {
 	if codec, ok := evt.Source().(remotes.Codec); ok && codec != nil {
-		return &pb.RemotesReply{
+		return &pb.ReceiveReply{
 			Event: toProtobufInputEvent(evt),
-			Codec: fmt.Sprint(codec.Type()),
+			Codec: pb.CodecType(codec.Type()),
 		}
 	} else {
-		return &pb.RemotesReply{
+		return &pb.ReceiveReply{
 			Event: toProtobufInputEvent(evt),
 		}
 	}

@@ -150,7 +150,7 @@ func (this *codec) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // CODEC INTERFACE
 
-func (this *codec) Type() remotes.RemoteCodec {
+func (this *codec) Type() remotes.CodecType {
 	return remotes.CODEC_APPLETV
 }
 
