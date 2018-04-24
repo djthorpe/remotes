@@ -15,10 +15,13 @@ import (
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
+	"github.com/djthorpe/gopi/util/event"
 	"github.com/djthorpe/remotes"
 
 	// Modules
+	_ "github.com/djthorpe/gopi/sys/hw/linux"
 	_ "github.com/djthorpe/gopi/sys/logger"
+	_ "github.com/djthorpe/remotes/codec/nec"
 )
 
 const (
@@ -89,11 +92,55 @@ func MainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
+	// Create a merged event channel
+	events := event.NewEventMerger()
+	remote_events := events.Subscribe()
+
+	// Add in the codecs
+
+	// Wait for either terminate signal or a new remote event
+FOR_LOOP:
+	for {
+		select {
+		case <-done:
+			break FOR_LOOP
+		case remote_event := <-remote_events:
+			fmt.Printf("Got event=%v\n", remote_event)
+		}
+	}
+
+	// Close merged events
+	events.Unsubscribe(remote_events)
+	events.Close()
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func codecs() []string {
+	codecs := make([]string, 0)
+	// Obtain all the codecs
+	for _, module := range gopi.ModulesByType(gopi.MODULE_TYPE_OTHER) {
+		if strings.HasPrefix(module.Name, "remotes/") {
+			codecs = append(codecs, module.Name)
+		}
+	}
+	return codecs
+}
+
 func main() {
+	// Obtain all codecs
+	codecs := codecs()
+	if len(codecs) == 0 {
+		fmt.Fprintln(os.Stderr, "Missing codecs")
+		os.Exit(-1)
+	}
+
 	// Configuration
-	config := gopi.NewAppConfig()
+	config := gopi.NewAppConfig(codecs...)
 	config.AppFlags.FlagString("device", "", "Name of device to learn")
 
 	// Run the command line tool
-	os.Exit(gopi.CommandLineTool(config, MainLoop))
+	os.Exit(gopi.CommandLineTool(config, MainLoop, EventLoop))
 }

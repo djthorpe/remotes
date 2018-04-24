@@ -13,5 +13,9 @@
 # Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
 .glide/
 
+# Custom
 .DS_Store
 ._*
+.pb.go
+*.keymap
+

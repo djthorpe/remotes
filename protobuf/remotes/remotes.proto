@@ -12,8 +12,26 @@ service Remotes {
     // Return array of codecs supported
     rpc Codecs (EmptyRequest) returns (CodecsReply);
 
-    // Send a remote scancode
-    rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
+	// Return array of keymaps supported
+	rpc Keymaps (KeymapsRequest) returns (KeymapsReply);
+
+	// Return a new empty keymap
+	rpc CreateKeymap (CreateKeymapRequest) returns (KeymapsReply);
+
+	// Delete a keymap
+	rpc DeleteKeymap (DeleteKeymapRequest) returns (EmptyReply);
+
+	// Set Keymap name
+	rpc SetKeymapName (SetKeymapNameRequest) returns (EmptyReply);
+
+	// Set Keymap key
+	rpc SetKeymapKey (SetKeymapKeyRequest) returns (EmptyReply);
+
+	// Send a remote scancode
+	rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
+	
+	// Send a keycode
+	rpc SendKeycode (SendKeycodeRequest) returns (EmptyReply);
 
     // Receive remote events
     rpc Receive (EmptyRequest) returns (stream ReceiveReply);
@@ -117,4 +135,8 @@ message SendScancodeRequest {
 
 message CodecsReply {
     repeated CodecType codec = 1;
+}
+
+message KeymapsReply {
+	repeated KeyMap keymap = 1;
 }
