@@ -34,6 +34,7 @@ import (
 type App struct {
 	app      *gopi.AppInstance
 	remote   *remotes.Remote
+	key      *remotes.KeyMap // Currently learned key
 	filename string
 }
 
@@ -56,6 +57,7 @@ func NewApp(app *gopi.AppInstance) *App {
 	this := new(App)
 	this.app = app
 	this.remote = nil
+	this.key = nil
 	return this
 }
 
@@ -79,7 +81,7 @@ func (this *App) Load(name string) error {
 		}
 
 		// Create a new remote
-		if remote := remotes.NewRemote(remotes.CODEC_NEC32, 0); remote == nil {
+		if remote := remotes.NewRemote(remotes.CODEC_NONE, 0); remote == nil {
 			return gopi.ErrBadParameter
 		} else {
 			remote.SetName(device_name)
@@ -107,9 +109,58 @@ func (this *App) SaveToFile() error {
 	}
 }
 
+func (this *App) SetKey(key *remotes.KeyMap) {
+	this.key = key
+}
+
 func (this *App) HandleEvent(evt *remotes.RemoteEvent) error {
-	fmt.Println("evt=%v", evt)
+	if this.key != nil && evt != nil {
+		// Set the codec if CODEC_NONE
+		if this.remote.Type == remotes.CODEC_NONE {
+			this.remote.Type = evt.Codec()
+		} else if this.remote.Type != evt.Codec() {
+			fmt.Printf("\n  Ignoring key, different codec (%v) than expected (%v)\n", evt.Codec(), this.remote.Type)
+			return nil
+		}
+
+		// Check the device
+		if this.remote.Device == 0 {
+			this.remote.Device = evt.Device()
+		} else if this.remote.Device != evt.Device() {
+			fmt.Printf("\n  Ignoring key, different device (0x%08X) than expected (0x%08X)\n", evt.Device(), this.remote.Device)
+			return nil
+		}
+
+		// Set the key
+		if err := this.remote.SetKey(this.key.Keycode, evt.Scancode(), ""); err != nil {
+			return err
+		} else {
+			fmt.Printf("\n  Learned device=%08X scancode=%08X => Key %v\n", evt.Device(), evt.Scancode(), this.key.Keycode)
+		}
+	}
+
+	// Success
 	return nil
+}
+
+// Keycodes returns the set of keys
+func (this *App) Keycodes() ([]*remotes.KeyMap, error) {
+	if keys, exists := this.app.AppFlags.GetString("key"); exists {
+		keymaps := make([]*remotes.KeyMap, 0)
+		for _, key := range strings.Split(keys, ",") {
+			if k := remotes.KeycodesForString(key); k == nil {
+				return nil, fmt.Errorf("Key(s) not found: %v", key)
+			} else {
+				keymaps = append(keymaps, k...)
+			}
+		}
+		// TODO: Check for empty case
+		// TODO: Check for duplicate keys
+		return keymaps, nil
+	} else {
+		// Return all keycodes
+		return remotes.Keycodes(), nil
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,25 +173,39 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 	// If device is empty, then return error
 	if device_name, exists := app.AppFlags.GetString("device"); exists == false {
+		done <- gopi.DONE
 		return fmt.Errorf("Missing -device flag")
 	} else if err := theApp.Load(device_name); err != nil {
+		done <- gopi.DONE
 		return err
 	} else {
 		// Iterate through Keycodes
-		keycodes := remotes.Keycodes()
-		for i, key := range keycodes {
-			fmt.Printf("(%v/%v) Press the \"%v\" key (%v) or wait...", i+1, len(keycodes), key.Name, key.Keycode)
-			if app.WaitForSignalOrTimeout(5 * time.Second) {
-				// Finish gracefully if signal caught
-				done <- gopi.DONE
-				fmt.Printf("\nTerminating without saving...\n")
-				return nil
+		if keycodes, err := theApp.Keycodes(); err != nil {
+			done <- gopi.DONE
+			return err
+		} else {
+			for i, key := range keycodes {
+				fmt.Printf("(%v/%v) Press the \"%v\" key (%v) or wait for the next key...", i+1, len(keycodes), key.Name, key.Keycode)
+
+				// Set the key we're currently learning
+				theApp.SetKey(key)
+
+				if app.WaitForSignalOrTimeout(5 * time.Second) {
+					// Finish gracefully if signal caught
+					done <- gopi.DONE
+					fmt.Printf("\nTerminating without saving...\n")
+					return nil
+				}
+
+				// Reset the key we're currently learning
+				theApp.SetKey(nil)
+				fmt.Println("")
 			}
-			fmt.Println("")
 		}
 
 		// Save file
 		if err := theApp.SaveToFile(); err != nil {
+			done <- gopi.DONE
 			return err
 		}
 	}
@@ -210,6 +275,7 @@ func main() {
 	// Configuration
 	config := gopi.NewAppConfig(codecs...)
 	config.AppFlags.FlagString("device", "", "Name of device to learn")
+	config.AppFlags.FlagString("key", "", "Comma-separated list of keys to learn")
 
 	// Set the start signal
 	startSignal = make(chan struct{})

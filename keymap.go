@@ -22,8 +22,8 @@ import (
 type Remote struct {
 	XMLName xml.Name  `xml:"remote"`
 	Device  uint32    `xml:"id,attr,omitempty"`
-	Name    string    `xml:"name"`
 	Type    CodecType `xml:"codec"`
+	Name    string    `xml:"name"`
 	Repeats uint      `xml:"repeats"`
 	Map     []*KeyMap `xml:"keymap"`
 }
@@ -32,6 +32,9 @@ type KeyMap struct {
 	Scancode uint32     `xml:"scancode"`
 	Keycode  RemoteCode `xml:"keycode"`
 	Name     string     `xml:"name"`
+	Device   uint32     `xml:"id,attr,omitempty"` // Overrides device if non-zero
+	Type     CodecType  `xml:"codec,omitempty"`   // Overrides codec if non-zero
+	Repeats  uint       `xml:"repeats,omitempty"` // Overrides repeats if non-zero
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -121,6 +124,7 @@ func (this *Remote) SaveToFile(filepath string) error {
 	}
 }
 
+// Returns all codes
 func Keycodes() []*KeyMap {
 	keycodes := make([]*KeyMap, 0)
 	for c := KEYCODE_NONE; c < KEYCODE_MAX; c++ {
@@ -131,6 +135,45 @@ func Keycodes() []*KeyMap {
 			// Append keycode
 			keycodes = append(keycodes, &KeyMap{Keycode: c, Name: name})
 		}
+	}
+	return keycodes
+}
+
+// Returns all codes which match a string or nil if nothing matches
+func KeycodesForString(token string) []*KeyMap {
+	selected := make(map[RemoteCode]*KeyMap)
+
+	// Firstly, uppercase the token
+	token = strings.ToUpper(token)
+
+	// Iterate through all the keycodes
+	for _, k := range Keycodes() {
+		if strings.HasPrefix(token, "KEYCODE_") {
+			if strings.HasPrefix(fmt.Sprint(k.Keycode), token) {
+				selected[k.Keycode] = k
+			}
+		} else {
+			search_tokens := strings.Split(strings.ToUpper(k.Name), " ")
+			other_tokens := strings.TrimPrefix(strings.ToUpper(fmt.Sprint(k.Keycode)), "KEYCODE_")
+			search_tokens = append(search_tokens, other_tokens)
+			search_tokens = append(search_tokens, strings.Split(other_tokens, "_")...)
+			for _, t := range search_tokens {
+				if token == t {
+					selected[k.Keycode] = k
+				}
+			}
+		}
+	}
+
+	// Return if nothing selected
+	if len(selected) == 0 {
+		return nil
+	}
+
+	// De-duplicate keys
+	keycodes := make([]*KeyMap, 0, len(selected))
+	for _, v := range selected {
+		keycodes = append(keycodes, v)
 	}
 	return keycodes
 }
