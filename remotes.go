@@ -9,6 +9,10 @@
 package remotes
 
 import (
+	"encoding/xml"
+	"errors"
+
+	// Frameworks
 	"github.com/djthorpe/gopi"
 )
 
@@ -16,9 +20,30 @@ import (
 // TYPES
 
 type (
-	RemoteCode gopi.KeyCode
-	CodecType  uint
+	RemoteCode           gopi.KeyCode
+	CodecType            uint
+	LoadSaveCallbackFunc func(filename string, keymap *KeyMap)
 )
+
+// KeyMapEntry maps a (keycode,codec,device) onto a single scancode
+type KeyMapEntry struct {
+	Scancode uint32     `xml:"scancode"`
+	Keycode  RemoteCode `xml:"keycode"`
+	Name     string     `xml:"name"`
+	Device   uint32     `xml:"id,attr,omitempty"` // Overrides device if non-zero
+	Type     CodecType  `xml:"codec,omitempty"`   // Overrides codec if non-zero
+	Repeats  uint       `xml:"repeats,omitempty"` // Overrides repeats if non-zero
+}
+
+// KeyMap maps one or more keys and scancodes
+type KeyMap struct {
+	XMLName xml.Name       `xml:"remote"`
+	Type    CodecType      `xml:"codec"`
+	Device  uint32         `xml:"id,attr,omitempty"`
+	Name    string         `xml:"name"`
+	Repeats uint           `xml:"repeats"`
+	Map     []*KeyMapEntry `xml:"keymap"`
+}
 
 /////////////////////////////////////////////////////////////////////
 // CONSTANTS
@@ -46,8 +71,13 @@ const (
 	CODEC_PANASONIC
 )
 
+const (
+	DEVICE_UNKNOWN   = 0xFFFFFFFF
+	SCANCODE_UNKNOWN = 0xFFFFFFFF
+)
+
 /////////////////////////////////////////////////////////////////////
-// INTERFACE
+// INTERFACES
 
 type Codec interface {
 	gopi.Driver
@@ -59,6 +89,46 @@ type Codec interface {
 	// Send scancode
 	Send(device uint32, scancode uint32, repeats uint) error
 }
+
+type KeyMaps interface {
+	gopi.Driver
+
+	// Return properties
+	Modified() bool
+
+	// Create a new KeyMap with unknown codec and device
+	NewKeyMap(name string) *KeyMap
+
+	// LoadKeyMaps from a path or file. When path is empty, uses root path
+	LoadKeyMaps(path string, callback LoadSaveCallbackFunc) error
+	LoadKeyMap(path string) (*KeyMap, error)
+
+	// Save modified KepMaps to files and save individual keymap
+	SaveModifiedKeyMaps(callback LoadSaveCallbackFunc) error
+	SaveKeyMap(keymap *KeyMap, path string) error
+
+	// Get a keymap from the database. Use DEVICE_UNKNOWN and
+	// CODEC_NONE to retrieve all keymaps
+	KeyMaps(codec CodecType, device uint32, name string) []*KeyMap
+
+	// Return keymapentry records matching a particular
+	// set of search terms. Will return name and keycode in
+	// each KeyMapEntry or nil. Returns all keycodes on empty
+	// searchterm array
+	LookupKeyCode(searchterm ...string) []*KeyMapEntry
+
+	// Set and lookup KeyMapEntry mapping
+	SetKeyMapEntry(keymap *KeyMap, codec CodecType, device uint32, keycode RemoteCode, scancode uint32) error
+	LookupKeyMapEntry(codec CodecType, device uint32, scancode uint32) []*KeyMapEntry
+}
+
+/////////////////////////////////////////////////////////////////////
+// ERROR CODES
+
+var (
+	ErrInvalidKey      = errors.New("Invalid Key")
+	ErrDuplicateKeyMap = errors.New("Duplicate KeyMap")
+)
 
 /////////////////////////////////////////////////////////////////////
 // STRINGIFY

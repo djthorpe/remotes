@@ -10,7 +10,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/djthorpe/gopi"
 	"github.com/djthorpe/gopi/util/event"
 	"github.com/djthorpe/remotes"
+	"github.com/djthorpe/remotes/keymap"
 
 	// Modules
 	_ "github.com/djthorpe/gopi/sys/hw/linux"
@@ -32,18 +32,14 @@ import (
 // TYPES
 
 type App struct {
-	app      *gopi.AppInstance
-	remote   *remotes.Remote
-	key      *remotes.KeyMap // Currently learned key
-	filename string
+	app    *gopi.AppInstance
+	keymap *remotes.KeyMap      // Currently learned keymap
+	key    *remotes.KeyMapEntry // Currently learned key
+	db     remotes.KeyMaps
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// CONSTANTS & GLOBALS
-
-const (
-	DEFAULT_EXT = ".keymap"
-)
+// GLOBALS
 
 var (
 	theApp      *App
@@ -56,110 +52,83 @@ var (
 func NewApp(app *gopi.AppInstance) *App {
 	this := new(App)
 	this.app = app
-	this.remote = nil
 	this.key = nil
+	this.keymap = nil
+
+	// Create keymap database configuration
+	config := keymap.Database{}
+	config.Root, _ = app.AppFlags.GetString("keymap.db")
+
+	// Create database
+	if db, err := gopi.Open(config, app.Logger); err != nil {
+		app.Logger.Error("Error: %v", err)
+		return nil
+	} else {
+		this.db = db.(remotes.KeyMaps)
+	}
+
+	// Load in the existing keymaps from root
+	if err := this.db.LoadKeyMaps("", func(filename string, keymap *remotes.KeyMap) {
+		app.Logger.Info("Loading: %v (%v)", filename, keymap.Name)
+	}); err != nil {
+		app.Logger.Error("Error: %v", err)
+		return nil
+	}
+
+	// Return theApp
 	return this
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // App methods
 
-func (this *App) Load(name string) error {
-
-	// Set the name to include extension
-	if filepath.Ext(name) != DEFAULT_EXT {
-		name = name + DEFAULT_EXT
-	}
-
-	// Create or load from file
-	if stat, err := os.Stat(name); os.IsNotExist(err) {
-		device_name := filepath.Base(name)
-
-		// Strip name of extension
-		if strings.HasSuffix(device_name, DEFAULT_EXT) {
-			device_name = strings.TrimSuffix(device_name, DEFAULT_EXT)
-		}
-
-		// Create a new remote
-		if remote := remotes.NewRemote(remotes.CODEC_NONE, 0); remote == nil {
-			return gopi.ErrBadParameter
-		} else {
-			remote.SetName(device_name)
-			this.remote = remote
-			this.filename = name
-		}
-	} else if stat.IsDir() {
-		return gopi.ErrBadParameter
-	} else if remote, err := remotes.RemoteFromFile(name); err != nil {
-		return err
-	} else {
-		this.remote = remote
-		this.filename = name
-	}
-
-	// Success
-	return nil
-}
-
-func (this *App) SaveToFile() error {
-	if this.remote == nil {
-		return gopi.ErrOutOfOrder
-	} else {
-		return this.remote.SaveToFile(this.filename)
-	}
-}
-
-func (this *App) SetKey(key *remotes.KeyMap) {
+func (this *App) SetKey(keymap *remotes.KeyMap, key *remotes.KeyMapEntry) {
+	this.keymap = keymap
 	this.key = key
 }
 
 func (this *App) HandleEvent(evt *remotes.RemoteEvent) error {
-	if this.key != nil && evt != nil {
-		// Set the codec if CODEC_NONE
-		if this.remote.Type == remotes.CODEC_NONE {
-			this.remote.Type = evt.Codec()
-		} else if this.remote.Type != evt.Codec() {
-			fmt.Printf("\n  Ignoring key, different codec (%v) than expected (%v)\n", evt.Codec(), this.remote.Type)
-			return nil
-		}
+	if this.keymap == nil && this.key == nil && evt == nil {
+		return nil
+	}
 
-		// Check the device
-		if this.remote.Device == 0 {
-			this.remote.Device = evt.Device()
-		} else if this.remote.Device != evt.Device() {
-			fmt.Printf("\n  Ignoring key, different device (0x%08X) than expected (0x%08X)\n", evt.Device(), this.remote.Device)
-			return nil
-		}
-
-		// Set the key
-		if err := this.remote.SetKey(this.key.Keycode, evt.Scancode(), ""); err != nil {
-			return err
-		} else {
-			fmt.Printf("\n  Learned device=%08X scancode=%08X => Key %v\n", evt.Device(), evt.Scancode(), this.key.Keycode)
-		}
+	if err := this.db.SetKeyMapEntry(this.keymap, evt.Codec(), evt.Device(), this.key.Keycode, evt.Scancode()); err != nil {
+		fmt.Printf("\n  %v\n", err)
+	} else {
+		fmt.Printf("\n  Recorded key %v for device 0x%08X and scancode 0x%08X\n", this.key.Keycode, evt.Device(), evt.Scancode())
 	}
 
 	// Success
 	return nil
 }
 
-// Keycodes returns the set of keys
-func (this *App) Keycodes() ([]*remotes.KeyMap, error) {
-	if keys, exists := this.app.AppFlags.GetString("key"); exists {
-		keymaps := make([]*remotes.KeyMap, 0)
-		for _, key := range strings.Split(keys, ",") {
-			if k := remotes.KeycodesForString(key); k == nil {
-				return nil, fmt.Errorf("Key(s) not found: %v", key)
-			} else {
-				keymaps = append(keymaps, k...)
-			}
-		}
-		// TODO: Check for empty case
-		// TODO: Check for duplicate keys
-		return keymaps, nil
+// Return a keymap
+func (this *App) KeyMapWithName(name string) *remotes.KeyMap {
+	// Find keymaps with the name specified
+	if keymaps := this.db.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, name); len(keymaps) == 0 {
+		this.app.Logger.Info("Creating a new keymap with name '%v'", name)
+		return this.db.NewKeyMap(name)
+	} else if len(keymaps) > 1 {
+		this.app.Logger.Warn("Name '%v' matches more than one keymap, using the first one")
+		return keymaps[0]
 	} else {
-		// Return all keycodes
-		return remotes.Keycodes(), nil
+		return keymaps[0]
+	}
+}
+
+// Save modified keymaps
+func (this *App) Save() error {
+	return this.db.SaveModifiedKeyMaps(func(filename string, keymap *remotes.KeyMap) {
+		this.app.Logger.Info("Saving: %v (%v)", filename, keymap.Name)
+	})
+}
+
+// Keycodes returns the set of keys
+func (this *App) Keycodes() []*remotes.KeyMapEntry {
+	if keys, exists := this.app.AppFlags.GetString("key"); exists {
+		return this.db.LookupKeyCode(strings.Split(keys, ",")...)
+	} else {
+		return this.db.LookupKeyCode()
 	}
 }
 
@@ -170,44 +139,44 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 	// Set the application and signal start
 	theApp = NewApp(app)
 	startSignal <- gopi.DONE
+	if theApp == nil {
+		done <- gopi.DONE
+		return fmt.Errorf("Unable to create application")
+	}
 
 	// If device is empty, then return error
-	if device_name, exists := app.AppFlags.GetString("device"); exists == false {
+	if name, exists := app.AppFlags.GetString("device"); exists == false {
 		done <- gopi.DONE
 		return fmt.Errorf("Missing -device flag")
-	} else if err := theApp.Load(device_name); err != nil {
+	} else if keymap := theApp.KeyMapWithName(name); keymap == nil {
 		done <- gopi.DONE
-		return err
+		return gopi.ErrBadParameter
 	} else {
 		// Iterate through Keycodes
-		if keycodes, err := theApp.Keycodes(); err != nil {
-			done <- gopi.DONE
-			return err
-		} else {
-			for i, key := range keycodes {
-				fmt.Printf("(%v/%v) Press the \"%v\" key (%v) or wait for the next key...", i+1, len(keycodes), key.Name, key.Keycode)
+		keycodes := theApp.Keycodes()
+		for i, key := range keycodes {
+			fmt.Printf("(%v/%v) Press the \"%v\" key (%v) or wait for the next key...", i+1, len(keycodes), key.Name, key.Keycode)
 
-				// Set the key we're currently learning
-				theApp.SetKey(key)
+			// Set the key we're currently learning
+			theApp.SetKey(keymap, key)
 
-				if app.WaitForSignalOrTimeout(5 * time.Second) {
-					// Finish gracefully if signal caught
-					done <- gopi.DONE
-					fmt.Printf("\nTerminating without saving...\n")
-					return nil
-				}
-
-				// Reset the key we're currently learning
-				theApp.SetKey(nil)
-				fmt.Println("")
+			if app.WaitForSignalOrTimeout(5 * time.Second) {
+				// Finish gracefully if signal caught
+				done <- gopi.DONE
+				fmt.Printf("\nTerminating without saving...\n")
+				return nil
 			}
-		}
 
-		// Save file
-		if err := theApp.SaveToFile(); err != nil {
-			done <- gopi.DONE
-			return err
+			// Reset the key we're currently learning
+			theApp.SetKey(keymap, nil)
+			fmt.Println("")
 		}
+	}
+
+	// Save any modified keymaps
+	if err := theApp.Save(); err != nil {
+		done <- gopi.DONE
+		return err
 	}
 
 	// Finish gracefully
@@ -274,6 +243,7 @@ func main() {
 
 	// Configuration
 	config := gopi.NewAppConfig(codecs...)
+	config.AppFlags.FlagString("keymap.db", "/var/local/remotes", "Key mapping database path")
 	config.AppFlags.FlagString("device", "", "Name of device to learn")
 	config.AppFlags.FlagString("key", "", "Comma-separated list of keys to learn")
 
