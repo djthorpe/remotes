@@ -37,27 +37,7 @@ var (
 	once  sync.Once
 )
 
-/*
 ////////////////////////////////////////////////////////////////////////////////
-
-func PrintHeader() {
-	fmt.Printf("%15s %10s %10s\n", "Codec", "Scancode", "Device")
-	fmt.Printf("%15s %10s %10s\n", "---------------", "----------", "----------")
-}
-
-func PrintEvent(evt gopi.Event) {
-	if event, ok := evt.(*remotes.RemoteEvent); event != nil && ok {
-		fmt.Printf("%15s %10s %10s %s\n",
-			event.Codec(),
-			fmt.Sprintf("0x%X", event.Scancode()),
-			fmt.Sprintf("0x%X", event.Device()),
-			event.EventType(),
-		)
-	} else {
-		fmt.Println(evt)
-	}
-}
-*/
 
 func PrintHeader() {
 	fmt.Printf("%-20s %-25v %-10s %-10s %-15s %-22s %s\n", "Name", "Key", "Scancode", "Device", "Codec", "Event", "Timestamp")
@@ -97,6 +77,9 @@ func EventLoop(app *gopi.AppInstance, done <-chan struct{}) error {
 	app.Logger.Debug("Waiting for start signal")
 	<-start
 	app.Logger.Debug("Got start signal")
+
+	// Output header
+	once.Do(PrintHeader)
 
 	// Create a merged event channel
 	events := event.NewEventMerger()
