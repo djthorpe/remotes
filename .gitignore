@@ -16,6 +16,5 @@
 # Custom
 .DS_Store
 ._*
-.pb.go
+*.pb.go
 *.keymap
-
