@@ -11,6 +11,7 @@ package remotes
 import (
 	"encoding/xml"
 	"errors"
+	"fmt"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -132,6 +133,20 @@ var (
 
 /////////////////////////////////////////////////////////////////////
 // STRINGIFY
+
+func (e *KeyMapEntry) String() string {
+	params := fmt.Sprintf("name=\"%v\" keycode=%v scancode=0x%08X", e.Name, e.Keycode, e.Scancode)
+	if e.Type != CODEC_NONE {
+		params += fmt.Sprintf(" codec=%v", e.Type)
+	}
+	if e.Device != 0 && e.Device != DEVICE_UNKNOWN {
+		params += fmt.Sprintf(" device=0x%08X", e.Device)
+	}
+	if e.Repeats != 0 {
+		params += fmt.Sprintf(" repeats=%v", e.Repeats)
+	}
+	return "<remotes.KeyMapEntry>{ " + params + " }"
+}
 
 func (c CodecType) String() string {
 	switch c {

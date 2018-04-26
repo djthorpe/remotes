@@ -22,6 +22,8 @@ import (
 	// Modules
 	_ "github.com/djthorpe/gopi/sys/hw/linux"
 	_ "github.com/djthorpe/gopi/sys/logger"
+
+	// Remotes
 	_ "github.com/djthorpe/remotes/codec/appletv"
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"

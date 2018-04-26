@@ -422,6 +422,7 @@ func (this *db) SetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 
 	// Here we're adding a new entry
 	keymap.Map = append(keymap.Map, &remotes.KeyMapEntry{
+		Keycode:  keycode,
 		Scancode: scancode,
 		Name:     defaultKeyName(keycode),
 	})
