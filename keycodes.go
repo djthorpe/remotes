@@ -79,33 +79,41 @@ const (
 	KEYCODE_SUBTITLE_OFF
 	KEYCODE_STOP
 	KEYCODE_PAUSE
+	KEYCODE_SLEEP
+	KEYCODE_BROWSE
+	KEYCODE_SHUFFLE
+	KEYCODE_REPEAT
 	KEYCODE_MAX
 )
 
 const (
-	KEYCODE_POWER_TOGGLE  = RemoteCode(gopi.KEYCODE_POWER)
-	KEYCODE_KEYPAD_1      = RemoteCode(gopi.KEYCODE_KP1)
-	KEYCODE_KEYPAD_2      = RemoteCode(gopi.KEYCODE_KP2)
-	KEYCODE_KEYPAD_3      = RemoteCode(gopi.KEYCODE_KP3)
-	KEYCODE_KEYPAD_4      = RemoteCode(gopi.KEYCODE_KP4)
-	KEYCODE_KEYPAD_5      = RemoteCode(gopi.KEYCODE_KP5)
-	KEYCODE_KEYPAD_6      = RemoteCode(gopi.KEYCODE_KP6)
-	KEYCODE_KEYPAD_7      = RemoteCode(gopi.KEYCODE_KP7)
-	KEYCODE_KEYPAD_8      = RemoteCode(gopi.KEYCODE_KP8)
-	KEYCODE_KEYPAD_9      = RemoteCode(gopi.KEYCODE_KP9)
-	KEYCODE_KEYPAD_0      = RemoteCode(gopi.KEYCODE_KP0)
-	KEYCODE_KEYPAD_SELECT = RemoteCode(gopi.KEYCODE_KPENTER)
-	KEYCODE_VOLUME_UP     = RemoteCode(gopi.KEYCODE_VOLUMEUP)
-	KEYCODE_VOLUME_DOWN   = RemoteCode(gopi.KEYCODE_VOLUMEDOWN)
-	KEYCODE_VOLUME_MUTE   = RemoteCode(gopi.KEYCODE_MUTE)
-	KEYCODE_CHANNEL_UP    = RemoteCode(gopi.KEYCODE_PAGEUP)
-	KEYCODE_CHANNEL_DOWN  = RemoteCode(gopi.KEYCODE_PAGEDOWN)
-	KEYCODE_NAV_UP        = RemoteCode(gopi.KEYCODE_UP)
-	KEYCODE_NAV_DOWN      = RemoteCode(gopi.KEYCODE_DOWN)
-	KEYCODE_NAV_LEFT      = RemoteCode(gopi.KEYCODE_LEFT)
-	KEYCODE_NAV_RIGHT     = RemoteCode(gopi.KEYCODE_RIGHT)
-	KEYCODE_NAV_BACK      = RemoteCode(gopi.KEYCODE_CANCEL)
-	KEYCODE_PLAY          = RemoteCode(gopi.KEYCODE_PLAY)
+	KEYCODE_NONE             = RemoteCode(gopi.KEYCODE_NONE)
+	KEYCODE_POWER_TOGGLE     = RemoteCode(gopi.KEYCODE_POWER)
+	KEYCODE_KEYPAD_1         = RemoteCode(gopi.KEYCODE_KP1)
+	KEYCODE_KEYPAD_2         = RemoteCode(gopi.KEYCODE_KP2)
+	KEYCODE_KEYPAD_3         = RemoteCode(gopi.KEYCODE_KP3)
+	KEYCODE_KEYPAD_4         = RemoteCode(gopi.KEYCODE_KP4)
+	KEYCODE_KEYPAD_5         = RemoteCode(gopi.KEYCODE_KP5)
+	KEYCODE_KEYPAD_6         = RemoteCode(gopi.KEYCODE_KP6)
+	KEYCODE_KEYPAD_7         = RemoteCode(gopi.KEYCODE_KP7)
+	KEYCODE_KEYPAD_8         = RemoteCode(gopi.KEYCODE_KP8)
+	KEYCODE_KEYPAD_9         = RemoteCode(gopi.KEYCODE_KP9)
+	KEYCODE_KEYPAD_0         = RemoteCode(gopi.KEYCODE_KP0)
+	KEYCODE_KEYPAD_SELECT    = RemoteCode(gopi.KEYCODE_KPENTER)
+	KEYCODE_VOLUME_UP        = RemoteCode(gopi.KEYCODE_VOLUMEUP)
+	KEYCODE_VOLUME_DOWN      = RemoteCode(gopi.KEYCODE_VOLUMEDOWN)
+	KEYCODE_VOLUME_MUTE      = RemoteCode(gopi.KEYCODE_MUTE)
+	KEYCODE_CHANNEL_UP       = RemoteCode(gopi.KEYCODE_PAGEUP)
+	KEYCODE_CHANNEL_DOWN     = RemoteCode(gopi.KEYCODE_PAGEDOWN)
+	KEYCODE_NAV_UP           = RemoteCode(gopi.KEYCODE_UP)
+	KEYCODE_NAV_DOWN         = RemoteCode(gopi.KEYCODE_DOWN)
+	KEYCODE_NAV_LEFT         = RemoteCode(gopi.KEYCODE_LEFT)
+	KEYCODE_NAV_RIGHT        = RemoteCode(gopi.KEYCODE_RIGHT)
+	KEYCODE_NAV_BACK         = RemoteCode(gopi.KEYCODE_CANCEL)
+	KEYCODE_PLAY             = RemoteCode(gopi.KEYCODE_PLAY)
+	KEYCODE_ADD              = RemoteCode(gopi.KEYCODE_KPPLUS)
+	KEYCODE_SEARCH           = RemoteCode(gopi.KEYCODE_SEARCH)
+	KEYCODE_BRIGHTNESS_CYCLE = RemoteCode(gopi.KEYCODE_BRIGHTNESS_CYCLE)
 )
 
 /////////////////////////////////////////////////////////////////////
@@ -113,6 +121,20 @@ const (
 
 func (k RemoteCode) String() string {
 	switch k {
+	case KEYCODE_BRIGHTNESS_CYCLE:
+		return "KEYCODE_BRIGHTNESS_CYCLE"
+	case KEYCODE_SHUFFLE:
+		return "KEYCODE_SHUFFLE"
+	case KEYCODE_REPEAT:
+		return "KEYCODE_REPEAT"
+	case KEYCODE_SLEEP:
+		return "KEYCODE_SLEEP"
+	case KEYCODE_SEARCH:
+		return "KEYCODE_SEARCH"
+	case KEYCODE_BROWSE:
+		return "KEYCODE_BROWSE"
+	case KEYCODE_ADD:
+		return "KEYCODE_ADD"
 	case KEYCODE_PLAY:
 		return "KEYCODE_PLAY"
 	case KEYCODE_PAUSE:

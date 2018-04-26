@@ -121,6 +121,32 @@ func (this *Remote) SaveToFile(filepath string) error {
 	}
 }
 
+func Keycodes() []*KeyMap {
+	keycodes := make([]*KeyMap, 0)
+	for c := KEYCODE_NONE; c < KEYCODE_MAX; c++ {
+		if name := fmt.Sprint(c); strings.HasPrefix(name, "KEYCODE_") {
+			// Convert name into more English-language
+			name = strings.ToLower(strings.TrimPrefix(name, "KEYCODE_"))
+			name = strings.Title(strings.Replace(name, "_", " ", -1))
+			// Append keycode
+			keycodes = append(keycodes, &KeyMap{Keycode: c, Name: name})
+		}
+	}
+	return keycodes
+}
+
+/////////////////////////////////////////////////////////////////////
+// STRINGIFY
+
+func (this *KeyMap) String() string {
+	params := fmt.Sprintf("keycode=%v ", this.Keycode)
+	params += fmt.Sprintf("scancode=0x%X ", this.Scancode)
+	if this.Name != "" {
+		params += fmt.Sprintf("name=\"%v\" ", this.Name)
+	}
+	return fmt.Sprintf("<remotes.KeyMap>{ %v}", params)
+}
+
 /////////////////////////////////////////////////////////////////////
 // PRIVATE METHODS
 
