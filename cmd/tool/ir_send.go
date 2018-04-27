@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -30,6 +31,12 @@ import (
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
 	_ "github.com/djthorpe/remotes/codec/sony"
+)
+
+////////////////////////////////////////////////////////////////////////////////
+
+var (
+	send chan *remotes.KeyMapEntry
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,7 +70,11 @@ func DisplayKeymaps(keymaps remotes.KeyMaps, app *gopi.AppInstance) error {
 	return err
 }
 
-func DisplayEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppInstance) error {
+func DisplayEntry(entry *remotes.KeyMapEntry) {
+	fmt.Printf("%-20s %-25s %-17v 0x%08X 0x%08X %7d\n", entry.Name, entry.Keycode, entry.Type, entry.Device, entry.Scancode, entry.Repeats)
+}
+
+func DisplayDeviceEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppInstance) error {
 	var once sync.Once
 	var err error
 
@@ -71,7 +82,7 @@ func DisplayEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppInstanc
 	for _, keymap := range keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, device) {
 		for _, entry := range keymaps.LookupKeyMapEntry(keymap.Type, keymap.Device, remotes.SCANCODE_UNKNOWN) {
 			once.Do(DisplayEntryHeader)
-			fmt.Printf("%-20s %-25s %-17v 0x%08X 0x%08X %7d\n", entry.Name, entry.Keycode, entry.Type, entry.Device, entry.Scancode, entry.Repeats)
+			DisplayEntry(entry)
 		}
 	}
 
@@ -85,6 +96,8 @@ func DisplayEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppInstanc
 }
 
 func Send(device string, keymaps remotes.KeyMaps, args []string) error {
+	var once sync.Once
+
 	// Get keymap for device
 	allkeymaps := keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, device)
 	if len(allkeymaps) != 1 {
@@ -107,7 +120,11 @@ func Send(device string, keymaps remotes.KeyMaps, args []string) error {
 			}
 			return fmt.Errorf("Ambiguous key: %v (It could mean one of %v)", arg, strings.TrimSuffix(ambigious, ","))
 		} else {
-			fmt.Printf("arg=%v entry=%v\n", arg, entries[0])
+			// TODO: Repeats
+			// Perform the send
+			once.Do(DisplayEntryHeader)
+			DisplayEntry(entries[0])
+			send <- entries[0]
 		}
 	}
 
@@ -116,6 +133,36 @@ func Send(device string, keymaps remotes.KeyMaps, args []string) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+func SendLoop(app *gopi.AppInstance, done <-chan struct{}) error {
+
+	// Make a map of the codecs registered
+	codec_map := make(map[remotes.CodecType]remotes.Codec, 10)
+	for _, name := range codecs() {
+		if instance, ok := app.ModuleInstance(name).(remotes.Codec); ok && instance != nil {
+			codec_map[instance.Type()] = instance
+		}
+	}
+
+FOR_LOOP:
+	for {
+		select {
+		case <-done:
+			break FOR_LOOP
+		case entry := <-send:
+			if entry != nil {
+				if codec, exists := codec_map[entry.Type]; exists == false || codec == nil {
+					return fmt.Errorf("Codec not registered: %v", entry.Type)
+				} else if err := codec.Send(entry.Device, entry.Scancode, entry.Repeats); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Success
+	return nil
+}
 
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 	// Load keymaps
@@ -138,14 +185,14 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 			done <- gopi.DONE
 			return err
 		}
-	} else if err := DisplayEntries(device, keymaps, app); err != nil {
+	} else if err := DisplayDeviceEntries(device, keymaps, app); err != nil {
 		done <- gopi.DONE
 		return err
 	}
 
 	// Wait for interrupt
-	//app.Logger.Info("Waiting for CTRL+C or SIGTERM to end")
-	//app.WaitForSignal()
+	app.Logger.Info("Waiting for CTRL+C or SIGTERM to end")
+	app.WaitForSignalOrTimeout(500 * time.Millisecond)
 
 	// Finish gracefully
 	done <- gopi.DONE
@@ -169,9 +216,11 @@ func main() {
 	// Configuration
 	codecs := append(codecs(), "keymap")
 	config := gopi.NewAppConfig(codecs...)
-
 	config.AppFlags.FlagString("device", "", "Name of device to send codes to")
 
+	// Make the send channel
+	send = make(chan *remotes.KeyMapEntry)
+
 	// Run the command line tool
-	os.Exit(gopi.CommandLineTool(config, Main))
+	os.Exit(gopi.CommandLineTool(config, Main, SendLoop))
 }
