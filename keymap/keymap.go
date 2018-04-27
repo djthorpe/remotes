@@ -424,6 +424,50 @@ func (this *db) SetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 	return nil
 }
 
+func (this *db) GetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, device uint32, keycode remotes.RemoteCode, scancode uint32) []*remotes.KeyMapEntry {
+	this.log.Debug2("<keymap.db>GetKeyMapEntry{ keymap=\"%v\" codec=%v device=0x%08X keycode=%v scancode=0x%08X }", keymap.Name, codec, device, keycode, scancode)
+
+	// Search through the keymap and return the entries which match
+	entries := make([]*remotes.KeyMapEntry, 0, 1)
+	for _, entry := range keymap.Map {
+		// Continue if the codec doesn't match
+		if codec != remotes.CODEC_NONE {
+			if entry.Type != remotes.CODEC_NONE && codec != entry.Type {
+				continue
+			} else if codec != keymap.Type {
+				continue
+			}
+		}
+		// Continue if device doesn't match
+		if device != remotes.DEVICE_UNKNOWN {
+			if entry.Device != remotes.DEVICE_UNKNOWN && entry.Device != 0 && entry.Device != device {
+				continue
+			} else if keymap.Device != device {
+				continue
+			}
+		}
+		// Continue if scancode doesn't match
+		if scancode != remotes.SCANCODE_UNKNOWN {
+			if entry.Scancode != remotes.SCANCODE_UNKNOWN && scancode != entry.Scancode {
+				continue
+			}
+		}
+		// Continue if keycode doesn't match
+		if keycode != remotes.KEYCODE_NONE {
+			if entry.Keycode != remotes.KEYCODE_NONE && keycode != entry.Keycode {
+				continue
+			}
+		}
+		// Or else we want to populate the entry
+		entries = appendKeyMapEntry(entries, entry, keymap)
+	}
+	if len(entries) == 0 {
+		return nil
+	} else {
+		return entries
+	}
+}
+
 func (this *db) LookupKeyMapEntry(codec remotes.CodecType, device uint32, scancode uint32) []*remotes.KeyMapEntry {
 	this.log.Debug2("<keymap.db>LookupKeyMapEntry{ codec=%v device=0x%08X scancode=0x%08X }", codec, device, scancode)
 

@@ -118,8 +118,9 @@ type KeyMaps interface {
 	// searchterm array
 	LookupKeyCode(searchterm ...string) []*KeyMapEntry
 
-	// Set and lookup KeyMapEntry mapping
+	// Set, get and lookup KeyMapEntry mapping
 	SetKeyMapEntry(keymap *KeyMap, codec CodecType, device uint32, keycode RemoteCode, scancode uint32) error
+	GetKeyMapEntry(keymap *KeyMap, codec CodecType, device uint32, keycode RemoteCode, scancode uint32) []*KeyMapEntry
 	LookupKeyMapEntry(codec CodecType, device uint32, scancode uint32) []*KeyMapEntry
 }
 
