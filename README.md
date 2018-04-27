@@ -40,7 +40,7 @@ is being developed elsewhere.
 
 Please see the [LICENSE](https://github.com/djthorpe/remotes/blob/master/LICENSE)
 file for how to redistribute in source or binary form. Ultimately you should
-credit the authors as per paragraph four of that license.
+credit the authors on redistribution as per paragraph four of that license.
 
 ## Feedback
 
@@ -74,7 +74,7 @@ the microservices:
 ```
 bash% go get github.com/djthorpe/remotes
 bash% cd ${GOPATH}/src/github.com/djthorpe/remotes
-bash% cmd/build-cmd.sh # To install the command-line utilities
+bash% cmd/build-tool.sh # To install the command-line utilities
 ```
 
 For gRPC installation on Raspberry Pi:
