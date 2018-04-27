@@ -24,8 +24,9 @@ fi
 # Install
 
 COMMANDS=(
-  ir_rcv/ir_rcv.go
-  ir_learn/ir_learn.go
+  tool/ir_rcv.go
+  tool/ir_learn.go
+  tool/ir_send.go
 )
 
 for COMMAND in ${COMMANDS[@]}; do

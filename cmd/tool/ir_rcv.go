@@ -122,7 +122,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		start <- gopi.DONE
 		done <- gopi.DONE
 		return errors.New("Missing keymaps")
-	} else if err := keymaps.LoadKeyMaps("", func(filename string, keymap *remotes.KeyMap) {
+	} else if err := keymaps.LoadKeyMaps(func(filename string, keymap *remotes.KeyMap) {
 		app.Logger.Info("Loading: %v (%v)", filename, keymap.Name)
 	}); err != nil {
 		start <- gopi.DONE
