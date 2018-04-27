@@ -17,11 +17,11 @@ import (
 	"github.com/djthorpe/gopi"
 	"github.com/djthorpe/gopi/util/event"
 	"github.com/djthorpe/remotes"
-	"github.com/djthorpe/remotes/keymap"
 
 	// Modules
 	_ "github.com/djthorpe/gopi/sys/hw/linux"
 	_ "github.com/djthorpe/gopi/sys/logger"
+	_ "github.com/djthorpe/remotes/keymap"
 
 	// Remotes
 	_ "github.com/djthorpe/remotes/codec/appletv"
@@ -56,21 +56,10 @@ func NewApp(app *gopi.AppInstance) *App {
 	this.app = app
 	this.key = nil
 	this.keymap = nil
-
-	// Create keymap database configuration
-	config := keymap.Database{}
-	config.Root, _ = app.AppFlags.GetString("keymap.db")
-
-	// Create database
-	if db, err := gopi.Open(config, app.Logger); err != nil {
-		app.Logger.Error("Error: %v", err)
-		return nil
-	} else {
-		this.db = db.(remotes.KeyMaps)
-	}
+	this.db = app.ModuleInstance("keymap").(remotes.KeyMaps)
 
 	// Load in the existing keymaps from root
-	if err := this.db.LoadKeyMaps("", func(filename string, keymap *remotes.KeyMap) {
+	if err := this.db.LoadKeyMaps(func(filename string, keymap *remotes.KeyMap) {
 		app.Logger.Info("Loading: %v (%v)", filename, keymap.Name)
 	}); err != nil {
 		app.Logger.Error("Error: %v", err)
@@ -236,16 +225,9 @@ func codecs() []string {
 }
 
 func main() {
-	// Obtain all codecs
-	codecs := codecs()
-	if len(codecs) == 0 {
-		fmt.Fprintln(os.Stderr, "Missing codecs")
-		os.Exit(-1)
-	}
-
 	// Configuration
+	codecs := append(codecs(), "keymap")
 	config := gopi.NewAppConfig(codecs...)
-	config.AppFlags.FlagString("keymap.db", "/var/local/remotes", "Key mapping database path")
 	config.AppFlags.FlagString("device", "", "Name of device to learn")
 	config.AppFlags.FlagString("key", "", "Comma-separated list of keys to learn")
 

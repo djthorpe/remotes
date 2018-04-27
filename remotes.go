@@ -100,8 +100,8 @@ type KeyMaps interface {
 	// Create a new KeyMap with unknown codec and device
 	NewKeyMap(name string) *KeyMap
 
-	// LoadKeyMaps from a path or file. When path is empty, uses root path
-	LoadKeyMaps(path string, callback LoadSaveCallbackFunc) error
+	// LoadKeyMaps database functions and load individual keymap
+	LoadKeyMaps(callback LoadSaveCallbackFunc) error
 	LoadKeyMap(path string) (*KeyMap, error)
 
 	// Save modified KepMaps to files and save individual keymap

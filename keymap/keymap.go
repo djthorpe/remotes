@@ -167,19 +167,12 @@ func (this *db) NewKeyMap(name string) *remotes.KeyMap {
 	return keymap
 }
 
-// Load keymaps from the root path, or another path
-func (this *db) LoadKeyMaps(path string, callback remotes.LoadSaveCallbackFunc) error {
-
-	// Override path with root if it's empty
-	if path == "" {
-		path = this.root
-	}
-
-	// Debug output
-	this.log.Debug2("<keymap.db>LoadKeyMaps{ path=\"%v\"}", path)
+// Load keymaps from the root path
+func (this *db) LoadKeyMaps(callback remotes.LoadSaveCallbackFunc) error {
+	this.log.Debug2("<keymap.db>LoadKeyMaps{ path=\"%v\"}", this.root)
 
 	// Check path to make sure it's a directory
-	if stat, err := os.Stat(path); os.IsNotExist(err) || stat.IsDir() == false {
+	if stat, err := os.Stat(this.root); os.IsNotExist(err) || stat.IsDir() == false {
 		if err != nil {
 			return err
 		} else {
@@ -187,7 +180,7 @@ func (this *db) LoadKeyMaps(path string, callback remotes.LoadSaveCallbackFunc) 
 		}
 	}
 	// Walk path loading in files with the correct extension
-	return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(this.root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
