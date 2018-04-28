@@ -280,7 +280,7 @@ Here is the schematic of the circuit with the bill of materials:
 If you want to make a PCB of this design you can [manufacturer one here from Aisler](https://aisler.net/djthorpe/djthorpe/raspberry-pi-ir-sender-receiver). Total cost
 including components would cost about £5 / €5 / $5 per unit. Here's a picture of what the populated PCB looks like:
 
-![PCB](https://raw.githubusercontent.com/djthorpe/remotes/master/etc/aisler-pcb-201802.jpg)
+![PCB](https://raw.githubusercontent.com/djthorpe/remotes/master/etc/aisler-pcb-201802.jpg?s=50)
 
 This is the bill of materials:
 
