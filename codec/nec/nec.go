@@ -18,7 +18,6 @@ import (
 	gopi "github.com/djthorpe/gopi"
 	evt "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
-	appletv "github.com/djthorpe/remotes/codec/appletv"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +61,8 @@ const (
 )
 
 const (
-	TOLERANCE = 25 // 25% tolerance on values
+	TOLERANCE    = 25     // 25% tolerance on values
+	APPLETV_CODE = 0x77E1 // The device code used by the AppleTV
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -71,7 +71,7 @@ const (
 var (
 	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE) // 9ms
 	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE) // 4.5ms
-	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)  // 650ns
+	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)  // 650ns
 	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1688, TOLERANCE) // 1.6ms
 	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 562, TOLERANCE)  // 500ns
 	TRAIL_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)  // 650ns
@@ -215,7 +215,7 @@ FOR_LOOP:
 }
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.Codec.NEC.Receive>{ evt=%v }", evt)
+	this.log.Debug2("<remotes.Codec.NEC.Receive>{ type=%v evt=%v }", this.codec_type, evt)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -359,20 +359,28 @@ func bitLengthForCodec(codec remotes.CodecType) uint {
 	switch codec {
 	case remotes.CODEC_NEC32:
 		return 32
+	case remotes.CODEC_APPLETV:
+		return 32
 	default:
 		return 0
 	}
 }
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
-	/* If we receive an AppleTV code, then return badparameter */
-	if (value & 0xFFFF0000 >> 16) == appletv.APPLETV_CODE {
-		return 0, 0, gopi.ErrBadParameter
-	}
-
-	/* Or else deal with non-AppleTV */
 	switch codec {
+	case remotes.CODEC_APPLETV:
+		remote := value & 0xFFFF0000 >> 16
+		if remote != APPLETV_CODE {
+			return 0, 0, gopi.ErrBadParameter
+		} else {
+			scancode := value & 0x0000FF00 >> 8
+			device := value & 0x000000FF
+			return scancode, device, nil
+		}
 	case remotes.CODEC_NEC32:
+		if (value & 0xFFFF0000 >> 16) == APPLETV_CODE {
+			return 0, 0, gopi.ErrBadParameter
+		}
 		value2 := value ^ 0x00FF00FF
 		if (value2 & 0x00FF00FF) != (value & 0xFF00FF00 >> 8) {
 			return 0, 0, fmt.Errorf("Invalid scancode or device 0x%08X for codec %v", value, codec)

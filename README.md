@@ -10,12 +10,11 @@ purchase.
 The types of remote controls supported may have one of the following encoding
 schemes:
 
-  * Sony 12-bit (CODEC_SONY12)
-  * Sony 15-bit (CODEC_SONY15)
-  * Sony 20-bit (CODEC_SONY20)
-  * NEC 32 bit (CODEC_NEC32)
+  * Sony 12- 15- and 20- bit (CODEC_SONY12,CODEC_SONY15,CODEC_SONY20)
   * Panasonic (CODEC_PANASONIC)
   * Legacy Apple TV (CODEC_APPLETV)
+  * NEC 32 bit (CODEC_NEC32)
+  * Philips RC5 (CODEC_RC5) __In development__
 
 It's fairly easy to add other encoding schemes. There is some software available
 to interact with your remotes:
@@ -33,8 +32,8 @@ services and clients to interact remotely through [gRPC](https://grpc.io/):
   * `remotes-client` is an example command-line client which can interact with
     the microservice through the gRPC protocol
 
-Ultimately the mircoservice should form a larger service for home automation; this
-is being developed elsewhere.
+Ultimately the mircoservice should form a larger service for home automation or 
+could be used to develop a web-accessible application; this is being developed elsewhere.
 
 ## License
 
@@ -53,7 +52,7 @@ which is listed in the GitHub [repository](https://github.com/djthorpe/remotes).
 ## Hardware Installation
 
 This hardware has been tested on a modern Raspbian installation but ultimately 
-any linux which is compiled with the `lirc` module should work fine. For a 
+any Linux which is compiled with the `lirc` module should work fine. For a 
 Raspberry Pi, you should add this to your `/boot/config.txt` file modifying
 the GPIO pins in order to load the LIRC (Linux Infrared Control) driver, 
 and then reboot your Raspberry Pi:
@@ -62,14 +61,15 @@ and then reboot your Raspberry Pi:
 dtoverlay=lirc-rpi,gpio_in_pin=22,gpio_out_pin=23
 ```
 
-Your LIRC should then be able to see the device `/dev/lirc0`. The best reference
-for how to interact with the device is [here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-intro.html).
+Your LIRC should then be able to see the device `/dev/lirc0`. If not check output 
+of the `lsmod` command.  The best reference for how to interact with the device at the low 
+level is [here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-intro.html).
 
 ## Software Installation
 
-You'll need a working Go Language environment to compile and install the software. There are
-a few dependencies, for example gRPC and Protocol Buffers, if you're wanting to use
-the microservices:
+You'll need a working Go Language environment to compile and install the software. There 
+are a few dependencies, for example gRPC and Protocol Buffers, if you're wanting to use the
+microservice:
 
 ```
 bash% go get github.com/djthorpe/remotes
@@ -77,7 +77,10 @@ bash% cd ${GOPATH}/src/github.com/djthorpe/remotes
 bash% cmd/build-tool.sh # To install the command-line utilities
 ```
 
-For gRPC installation on Raspberry Pi:
+This will result in a number of binaries installed in `${GOBIN}`: `ir_learn`, 
+`ir_rcv` and `ir_send` which are described below. For microservices installation
+on Raspberry Pi you can download and install Protocol Buffers, gRPC and then 
+install the binaries:
 
 ```
 bash% sudo apt install protobuf-compiler
@@ -87,14 +90,25 @@ bash% cd ${GOPATH}/src/github.com/djthorpe/remotes
 bash% cmd/build-rpc.sh # To install the RPC binaries
 ```
 
-This will result in a number of binaries: `ir_learn`, `ir_rcv`,  `ir_send`, `remotes-service`
-and `remotes-client`. More information on these binaries below.
+This will result in the installation of the service `remotes-service`and and example
+command-line client `remotes-client`. More information on these binaries below.
 
 # Usage
 
 ## Running Command-Line Tools
 
-You can use the following optional command-line flags with all the binaries:
+Before you use the command-line tools, you will need to create a folder at
+`/var/local/remotes` which will be used for storing the key mapping 
+database files for the remotes, which is stored in XML format with the file
+extension `.keymap`. The command-line tools are invoked as follows:
+
+```
+  ir_rcv <common flags>
+  ir_learn <command flags> -device <device_name> -key <key_list>
+  ir_send <command flags> -device <device_name> <key_list>  
+```
+
+You can use the following optional common flags with all the binaries:
 
 ```
   -debug
@@ -113,19 +127,15 @@ You can use the following optional command-line flags with all the binaries:
     	Key mapping file extension  (default ".keymap")         
 ```
 
-In particular the software expects the LIRC device to be `/dev/lirc0` by default. You will
-need to create a folder at `/var/local/remotes` which will be used for storing the
-key mapping database for each remote, which is stored in XML format with the file
-extension `.keymap`.
-
-You can check to see if the software is working with the following command:
+Here is a detailed description of how to use each tool. You can check to see if the
+software is working with the following command:
 
 ```
 bash% ir_rcv
 ```
 
-This will display a table of learnt keys and also display scan codes which have yet to be matched
-(marked as `<unmapped>`.) This is what some example output might look like:
+This will display a table of learnt keys and also display scan codes which have yet to be 
+matched (marked as `<unmapped>`.) This is what some example output might look like:
 
 ```
 Name                 Key                       Scancode   Device     Codec           Event                  Timestamp
@@ -139,8 +149,6 @@ Nav Right            KEYCODE_NAV_RIGHT         0x0000111C 0x40040D00 CODEC_PANAS
 Nav Right            KEYCODE_NAV_RIGHT         0x0000111C 0x40040D00 CODEC_PANASONIC INPUT_EVENT_KEYREPEAT  14.056s
 <unmapped>           <unmapped>                0x0000CCC1 0x40040D00 CODEC_PANASONIC INPUT_EVENT_KEYPRESS   14.97s
 <unmapped>           <unmapped>                0x0000CCC1 0x40040D00 CODEC_PANASONIC INPUT_EVENT_KEYREPEAT  15.102s
-<unmapped>           <unmapped>                0x0000CCC1 0x40040D00 CODEC_PANASONIC INPUT_EVENT_KEYPRESS   15.558s
-<unmapped>           <unmapped>                0x0000CCC1 0x40040D00 CODEC_PANASONIC INPUT_EVENT_KEYPRESS   15.797s
 <unmapped>           <unmapped>                0x0000CCC1 0x40040D00 CODEC_PANASONIC INPUT_EVENT_KEYREPEAT  15.929s
 Pad 2                KEYCODE_KEYPAD_2          0x00000008 0x00000076 CODEC_NEC32     INPUT_EVENT_KEYPRESS   18.98s
 Pad 2                KEYCODE_KEYPAD_2          0x00000008 0x00000076 CODEC_NEC32     INPUT_EVENT_KEYPRESS   19.231s
@@ -172,7 +180,25 @@ remote device has been learnt, you can use the `ir_send` utility to check the ke
 and send codes to your device:
 
 ```
-  bash% ir_send -device "DVD Player" play
+bash% ir_send
+KEY                  CODE                      CODEC             DEVICE     SCANCODE   REPEATS
+-------------------- ------------------------- ----------------- ---------- ---------- -------
+appletv              CODEC_APPLETV        0x0000009F       6       0
+squeezebox           CODEC_NEC32          0x00000076      27       0
+dvd                  CODEC_PANASONIC      0x40040D00      26       0
+
+bash% ir_send -device dvd
+KEY                  CODE                      CODEC             DEVICE     SCANCODE   REPEATS
+-------------------- ------------------------- ----------------- ---------- ---------- -------
+Nav Back             KEYCODE_NAV_BACK          CODEC_PANASONIC   0x40040D00 0x0000818C       0
+Nav Down             KEYCODE_NAV_DOWN          CODEC_PANASONIC   0x40040D00 0x0000616C       0
+Nav Left             KEYCODE_NAV_LEFT          CODEC_PANASONIC   0x40040D00 0x0000E1EC       0
+Pad 0                KEYCODE_KEYPAD_0          CODEC_PANASONIC   0x40040D00 0x00009895       0
+Pad 2                KEYCODE_KEYPAD_2          CODEC_PANASONIC   0x40040D00 0x00008885       0
+Pad 7                KEYCODE_KEYPAD_7          CODEC_PANASONIC   0x40040D00 0x00006865       0
+Search Left          KEYCODE_SEARCH_LEFT       CODEC_PANASONIC   0x40040D00 0x0000202D       0
+Power Toggle         KEYCODE_POWER_TOGGLE      CODEC_PANASONIC   0x40040D00 0x0000BCB1       0
+Sleep                KEYCODE_SLEEP             CODEC_PANASONIC   0x40040D00 0x0000D7DA       0
 ```
 
 If you invoke `ir_send` without any arguments, it will display a list of learnt devices. If you invoke
@@ -181,10 +207,10 @@ or more arguments to send an IR command. If you have some ambigious key names, t
 modify what you use on the command line to specify a key more exactly. For example,
 
 ```
-bash% ir_send -device "Apple TV" volume
+bash% ir_send -device "appletv" volume
 Ambiguous key: volume (It could mean one of 'Volume Down','Volume Up')
 
-bash% ir_send -device "Apple TV" volume_down
+bash% ir_send -device "appletv" volume_down
 KEY                  CODE                      CODEC             DEVICE     SCANCODE   REPEATS
 -------------------- ------------------------- ----------------- ---------- ---------- -------
 Volume Down          KEYCODE_VOLUME_DOWN       CODEC_APPLETV     0x0000009F 0x000000B0       0

@@ -27,7 +27,6 @@ import (
 	_ "github.com/djthorpe/remotes/keymap"
 
 	// Remotes
-	_ "github.com/djthorpe/remotes/codec/appletv"
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
 	_ "github.com/djthorpe/remotes/codec/sony"

@@ -31,4 +31,18 @@ func init() {
 			}, app.Logger)
 		},
 	})
+
+	// Register remotes/appletv
+	gopi.RegisterModule(gopi.Module{
+		Name:     "remotes/appletv2",
+		Requires: []string{"lirc"},
+		Type:     gopi.MODULE_TYPE_OTHER,
+		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
+			return gopi.Open(Codec{
+				LIRC: app.ModuleInstance("lirc").(gopi.LIRC),
+				Type: remotes.CODEC_APPLETV,
+			}, app.Logger)
+		},
+	})
+
 }
