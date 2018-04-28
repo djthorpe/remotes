@@ -16,8 +16,8 @@ schemes:
   * NEC 32 bit (CODEC_NEC32)
   * Philips RC5 (CODEC_RC5) __In development__
 
-It's fairly easy to add other encoding schemes. There is some software available
-to interact with your remotes:
+It's fairly easy to add other encoding schemes, please see the Appendix below.
+There is some software available to interact with your remotes:
 
   * `ir_learn` can be used to learn a new remote or update an existing remote
     in the database of "key mappings"
@@ -51,7 +51,12 @@ which is listed in the GitHub [repository](https://github.com/djthorpe/remotes).
 
 ## Hardware Installation
 
-This hardware has been tested on a modern Raspbian installation but ultimately 
+You'll need an IR sender and/or receiver plugged into your GPIO port. There
+is a schematic and bill of materials below, plus a link to manufacture
+a PCB, if you want to make one up, or you can easily purchase one or breadboard
+it.
+
+The hardware has been tested on a modern Raspbian installation but ultimately 
 any Linux which is compiled with the `lirc` module should work fine. For a 
 Raspberry Pi, you should add this to your `/boot/config.txt` file modifying
 the GPIO pins in order to load the LIRC (Linux Infrared Control) driver, 
@@ -271,6 +276,14 @@ Here is the schematic of the circuit with the bill of materials:
 
 ![IR Schematic](https://raw.githubusercontent.com/djthorpe/remotes/master/etc/ir_schematic.png)
 
+
+If you want to make a PCB of this design you can [manufacturer one here from Aisler](https://aisler.net/djthorpe/djthorpe/raspberry-pi-ir-sender-receiver). Total cost
+including components would cost about £5 / €5 / $5 per unit. Here's a picture of what the populated PCB looks like:
+
+![PCB](https://raw.githubusercontent.com/djthorpe/remotes/master/etc/aisler-pcb-201802.jpg)
+
+This is the bill of materials:
+
 | Name | Part                  | Description |
 | ---- | ---- | ---- |
 | D1   |  Vishay TSAL6200      | 940nm IR LED, 5mm (T-1 3/4) Through Hole package |
@@ -281,7 +294,80 @@ Here is the schematic of the circuit with the bill of materials:
 | R3   |  36Ω ±1% 0.6W         | Carbon Resistor, 0.6W, 1%, 36R |
 | J1   |  26 Way PCB Header    | 2.54mm Pitch 13x2 Rows Straight PCB Socket |
 
-If you want to make a PCB of this design you can [manufacturer one here from Aisler](https://aisler.net/djthorpe/djthorpe/raspberry-pi-ir-sender-receiver). Total cost
-including components would cost about £5 / €5 / $5 per unit.
+## Adding in more codecs
 
+You can add in any number of Codecs which respond to LIRC pulse/space messages.
+In order to do so, I would firstly understand how to develop a 'module' for the 
+`gopi` framework. When registering the module in your `init` function, use
+module type `gopi.MODULE_TYPE_OTHER` and the module should have the name 
+prefix `remotes/`. You will want a dependency on the `lirc` module. Here is what
+a typical `init()` function may contain:
 
+```
+	gopi.RegisterModule(gopi.Module{
+		Name:     "remotes/panasonic",
+		Requires: []string{"lirc"},
+		Type:     gopi.MODULE_TYPE_OTHER,
+		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
+			return gopi.Open(Codec{
+				LIRC: app.ModuleInstance("lirc").(gopi.LIRC),
+			}, app.Logger)
+		},
+	}) 
+```
+
+Secondly, your module should subscribe to events from the LIRC module
+instance, and process them in the background. You'll receive a stream
+of LIRC events:
+
+```
+type LIRCEvent interface {
+	Event
+
+	// The type of message
+	Type() LIRCType
+
+	// The value
+	Value() uint32
+}
+```
+
+The LIRC type will be one of `LIRC_TYPE_SPACE`,`LIRC_TYPE_PULSE`,
+`LIRC_TYPE_FREQUENCY`or `LIRC_TYPE_TIMEOUT`. Practically the Raspberry
+Pi module only supports pulses and spaces and the value is measured
+in nanoseconds. For receiving and recognizing commands, it's perhaps
+easiest to develop a state machine which responds to and recognizes
+commands, or resets back to the initial state if not recognized. Your
+codec should then emit a `RemoteEvent` structure on recognition:
+
+```
+type RemoteEvent struct {
+	source   Codec           // Codec that emitted the event
+	ts       time.Duration   // Rolling timecode
+	device   uint32          // Unique device identifier, or 0
+	scancode uint32          // Scancode identifying command
+	repeat   bool            // Whether this is a repeat code
+}
+```
+
+To send a command, you need to implement the following function. The
+`repeats` value should be zero to send a single command, or greater than
+zero to send one or more repeats for the command.
+
+```
+func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
+	var pulses[]uint32
+
+	// Send a pulse and a space
+	pulses = append(pulses, pulse_nanoseconds,space_nanoseconds)
+
+  // ...Continue to send pulses and spaces and end on a pulse...
+
+	// Perform the pulse send
+	return this.lirc.PulseSend(pulses)
+}
+```
+
+You can of course see the examples in the repository. The `codec` folder contains
+all of the implemented codecs so far. If you want to include your codec here, send
+me a pull request!
