@@ -41,8 +41,8 @@ var (
 ////////////////////////////////////////////////////////////////////////////////
 
 func DisplayKeymapsHeader() {
-	fmt.Printf("%-20s %-25s %-17s %-10s %-10s %-7s\n", "KEY", "CODE", "CODEC", "DEVICE", "SCANCODE", "REPEATS")
-	fmt.Printf("%-20s %-25s %-17s %-10s %-10s %-7s\n", strings.Repeat("-", 20), strings.Repeat("-", 25), strings.Repeat("-", 17), strings.Repeat("-", 10), strings.Repeat("-", 10), strings.Repeat("-", 7))
+	fmt.Printf("%-20s %-20s %-10s %-7s %-7s\n", "DEVICE", "CODEC", "ID", "KEYS", "REPEATS")
+	fmt.Printf("%-20s %-20s %-10s %-7s %-7s\n", strings.Repeat("-", 20), strings.Repeat("-", 20), strings.Repeat("-", 10), strings.Repeat("-", 7), strings.Repeat("-", 7))
 }
 
 func DisplayEntryHeader() {

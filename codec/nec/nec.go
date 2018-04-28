@@ -301,10 +301,26 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 	this.log.Debug("<remotes.Codec.NEC>Send{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
 
-	if device&0xFFFFFF00 != 0 {
-		this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
-		return gopi.ErrBadParameter
+	switch this.codec_type {
+	case remotes.CODEC_NEC32:
+		if device&0xFFFFFF00 != 0 {
+			this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
+			return gopi.ErrBadParameter
+		} else {
+			device = (device & 0xFF)
+			device |= (device ^ 0xFF) << 8
+		}
+	case remotes.CODEC_APPLETV:
+		if device != APPLETV_CODE {
+			this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
+			return gopi.ErrBadParameter
+		} else {
+			device = (APPLETV_CODE&0xFF)<<8 | (APPLETV_CODE&0xFF00)>>8
+		}
+	default:
+		return gopi.ErrNotImplemented
 	}
+
 	if scancode&0xFFFFFF00 != 0 {
 		this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
 		return gopi.ErrBadParameter
@@ -316,9 +332,9 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 	pulses = append(pulses, HEADER_PULSE.Value, HEADER_SPACE.Value)
 
 	// device and scancode
-	pulses = this.sendbyte(pulses, uint8(device))
-	pulses = this.sendbyte(pulses, uint8(device^0xFF))
-	pulses = this.sendbyte(pulses, uint8(scancode))
+	pulses = this.sendbyte(pulses, uint8(device&0x00FF))
+	pulses = this.sendbyte(pulses, uint8((device&0xFF00)>>8))
+	pulses = this.sendbyte(pulses, uint8(scancode&0x00FF))
 	pulses = this.sendbyte(pulses, uint8(scancode^0xFF))
 
 	// A final 562.5µs pulse
@@ -374,7 +390,7 @@ func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error)
 			return 0, 0, gopi.ErrBadParameter
 		} else {
 			scancode := value & 0x0000FF00 >> 8
-			device := value & 0x000000FF
+			device := value & 0xFFFF0000 >> 16
 			return scancode, device, nil
 		}
 	case remotes.CODEC_NEC32:
