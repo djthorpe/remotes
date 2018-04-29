@@ -41,6 +41,7 @@ type codec struct {
 	state       state
 	value       uint32
 	length      uint
+	repeat      bool
 }
 
 type state uint32
@@ -54,14 +55,15 @@ const (
 	STATE_EXPECT_HEADER_SPACE
 	STATE_EXPECT_PULSE
 	STATE_EXPECT_SPACE
+	STATE_EXPECT_END_PULSE
+	STATE_EXPECT_TRAIL_SPACE_17500
+	STATE_EXPECT_TRAIL_SPACE_35000
 	STATE_EXPECT_REPEAT_SPACE
 	STATE_EXPECT_REPEAT_PULSE
-	STATE_EXPECT_REPEAT_SPACE2
-	STATE_EXPECT_END
 )
 
 const (
-	TOLERANCE    = 25 // 25% tolerance on values
+	TOLERANCE    = 35 // 35% tolerance on values
 	APPLETV_CODE = 0x77E1
 )
 
@@ -69,18 +71,17 @@ const (
 // VARIABLES
 
 var (
-	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE) // 9ms
-	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE) // 4.5ms
-	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 600, TOLERANCE)  // 650ns
-	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1688, TOLERANCE) // 1.6ms
-	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 562, TOLERANCE)  // 500ns
-	TRAIL_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)  // 650ns
-
-	REPEAT_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 35000, TOLERANCE)  // 35ms
-	REPEAT_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)   // 9ms
-	REPEAT_SPACE2 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 2250, TOLERANCE)   // 2.25ms
-	REPEAT_SPACE3 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 250000, TOLERANCE) // 250ms
-	REPEAT_SPACE4 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 90000, TOLERANCE)  // 90ms
+	HEADER_PULSE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE) // 9ms
+	HEADER_SPACE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE) // 4.5ms
+	BIT_PULSE         = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 650, TOLERANCE)  // 650ns
+	ONE_SPACE         = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1600, TOLERANCE) // 1.6ms
+	ZERO_SPACE        = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 562, TOLERANCE)
+	TRAIL_PULSE       = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 552, TOLERANCE)
+	TRAIL_SPACE_17500 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 17500, TOLERANCE) // 17.5ms
+	TRAIL_SPACE_35000 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 35000, TOLERANCE) // 35ms
+	REPEAT_PULSE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)  // 9ms
+	REPEAT_SPACE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 2500, TOLERANCE)
+	REPEAT_SPACE2     = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 96577, TOLERANCE)
 )
 
 var (
@@ -172,6 +173,7 @@ func (this *codec) Reset() {
 	this.state = STATE_EXPECT_HEADER_PULSE
 	this.value = 0
 	this.length = 0
+	this.repeat = false
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -247,46 +249,63 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 			this.Reset()
 		}
 
-		// Advance state and emit scancode
+		// Advance state to expect the trailing pulse
 		if this.length == this.bit_length {
-			this.Emit(this.value, false)
-			this.state = STATE_EXPECT_END
+			//this.Emit(this.value, false)
+			this.state = STATE_EXPECT_END_PULSE
 		} else if this.length > 0 {
 			this.state = STATE_EXPECT_PULSE
 		}
-	case STATE_EXPECT_END:
+	case STATE_EXPECT_END_PULSE:
 		// Mark the end of transmission
 		if BIT_PULSE.Matches(evt) {
-			this.state = STATE_EXPECT_REPEAT_SPACE
+			if this.codec_type == remotes.CODEC_NEC16 {
+				this.state = STATE_EXPECT_TRAIL_SPACE_17500
+			} else {
+				// Emit key press for NEC32
+				this.Emit(this.value, this.repeat)
+				this.state = STATE_EXPECT_TRAIL_SPACE_35000
+			}
 		} else {
 			this.Reset()
 		}
-	case STATE_EXPECT_REPEAT_SPACE:
-		if REPEAT_SPACE3.LessThan(evt) {
-			// Not a repeat code, it's the start of a new cycle
+	case STATE_EXPECT_TRAIL_SPACE_17500:
+		if TRAIL_SPACE_17500.Matches(evt) {
+			// End of NEC16 code
+			this.Emit(this.value, this.repeat)
+			this.state = STATE_EXPECT_PULSE
+			this.value = 0
+			this.length = 0
+			this.repeat = true
+		} else {
 			this.Reset()
-		} else if REPEAT_SPACE.GreaterThan(evt) {
-			// It's a repeat code
+		}
+	case STATE_EXPECT_TRAIL_SPACE_35000:
+		if TRAIL_SPACE_35000.Matches(evt) {
+			// End of NEC32 code
 			this.state = STATE_EXPECT_REPEAT_PULSE
-		} else if REPEAT_SPACE4.Matches(evt) {
-			// It's a repeat code
+		} else if REPEAT_SPACE2.Matches(evt) {
+			// End of NEC32 repeat
 			this.state = STATE_EXPECT_REPEAT_PULSE
 		} else {
 			this.Reset()
 		}
 	case STATE_EXPECT_REPEAT_PULSE:
 		if REPEAT_PULSE.Matches(evt) {
-			this.state = STATE_EXPECT_REPEAT_SPACE2
+			this.repeat = true
+			this.state = STATE_EXPECT_REPEAT_SPACE
 		} else {
 			this.Reset()
 		}
-	case STATE_EXPECT_REPEAT_SPACE2:
-		if REPEAT_SPACE2.Matches(evt) {
-			// Emit a repeated code
-			if this.length > 0 {
-				this.Emit(this.value, true)
-			}
-			this.state = STATE_EXPECT_END
+	case STATE_EXPECT_REPEAT_SPACE:
+		if REPEAT_SPACE.Matches(evt) || REPEAT_SPACE2.Matches(evt) {
+			this.Emit(this.value, this.repeat)
+			this.state = STATE_EXPECT_END_PULSE
+		} else if HEADER_SPACE.Matches(evt) {
+			this.state = STATE_EXPECT_PULSE
+			this.value = 0
+			this.length = 0
+			this.repeat = true
 		} else {
 			this.Reset()
 		}
@@ -299,7 +318,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
-	this.log.Debug("<remotes.Codec.NEC>Send{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
+	this.log.Debug2("<remotes.Codec.NEC>Send{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
 
 	// 9ms leading pulse burst and 4.5ms space
 	pulses := make([]uint32, 0, 100)
@@ -307,10 +326,6 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 
 	switch this.codec_type {
 	case remotes.CODEC_NEC32:
-		// Ignore AppleTV devices in the NEC32 version
-		if device == APPLETV_CODE {
-			return gopi.ErrBadParameter
-		}
 		// Ensure the device is 16 bits and the scancode is 8 bits
 		if uint32(uint16(device)) != device {
 			this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
@@ -320,6 +335,24 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 			this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
 			return gopi.ErrBadParameter
 		}
+		// Emit the device and scancode
+		pulses = this.sendbyte(pulses, uint8(device&0x00FF))
+		pulses = this.sendbyte(pulses, uint8((device&0xFF00)>>8))
+		pulses = this.sendbyte(pulses, uint8(scancode&0x00FF))
+		pulses = this.sendbyte(pulses, uint8(scancode^0xFF))
+	case remotes.CODEC_NEC16:
+		// Ensure the device is 8 bits and the scancode is 8 bits
+		if uint32(uint8(device)) != device {
+			this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
+			return gopi.ErrBadParameter
+		}
+		if uint32(uint8(scancode)) != scancode {
+			this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
+			return gopi.ErrBadParameter
+		}
+		// Emit the device and scancode
+		pulses = this.sendbyte(pulses, uint8(device&0x00FF))
+		pulses = this.sendbyte(pulses, uint8(scancode&0x00FF))
 	case remotes.CODEC_APPLETV:
 		// Ensure device code is 8 bits and scancode is 8 bits
 		if uint32(uint8(device)) != device {
@@ -330,24 +363,23 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 			this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
 			return gopi.ErrBadParameter
 		}
+		// Emit the AppleTV code, then the scancode and device
+		pulses = this.sendbyte(pulses, uint8(APPLETV_CODE&0xFF00>>8))
+		pulses = this.sendbyte(pulses, uint8(APPLETV_CODE&0x00FF))
+		pulses = this.sendbyte(pulses, uint8(device&0x00FF))
+		pulses = this.sendbyte(pulses, uint8(scancode&0x00FF))
 	default:
 		return gopi.ErrNotImplemented
 	}
-
-	// device and scancode
-	pulses = this.sendbyte(pulses, uint8(device&0x00FF))
-	pulses = this.sendbyte(pulses, uint8((device&0xFF00)>>8))
-	pulses = this.sendbyte(pulses, uint8(scancode&0x00FF))
-	pulses = this.sendbyte(pulses, uint8(scancode^0xFF))
 
 	// A final 562.5µs pulse
 	pulses = append(pulses, TRAIL_PULSE.Value)
 
 	// If there is one or more repeats, then do these
 	if repeats > 0 {
-		pulses = append(pulses, REPEAT_SPACE.Value)
+		pulses = append(pulses, TRAIL_SPACE_35000.Value)
 		for i := uint(0); i < repeats; i++ {
-			pulses = append(pulses, REPEAT_PULSE.Value, REPEAT_SPACE2.Value)
+			pulses = append(pulses, REPEAT_PULSE.Value, REPEAT_SPACE.Value)
 		}
 		// A final 562.5µs pulse
 		pulses = append(pulses, TRAIL_PULSE.Value)
@@ -389,24 +421,33 @@ func bitLengthForCodec(codec remotes.CodecType) uint {
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
 	switch codec {
+	case remotes.CODEC_APPLETV:
+		// Check for Apple TV device
+		appletv := value & 0xFFFF0000 >> 16
+		if appletv != APPLETV_CODE {
+			return 0, 0, gopi.ErrBadParameter
+		}
+		device := value & 0x000000FF
+		scancode := value & 0x0000FF00 >> 8
+		return scancode, device, nil
 	case remotes.CODEC_NEC32:
+		// Ignore Apple TV
+		device := value & 0xFFFF0000 >> 16
+		if device == APPLETV_CODE {
+			return 0, 0, gopi.ErrBadParameter
+		}
 		// Check to make sure scancode and reverse of scancode match
 		scancode1 := value & 0x0000FF00 >> 8
 		scancode2 := value & 0x000000FF
-		device := value & 0xFFFF0000 >> 16
 		if scancode1 != scancode2^0x00FF {
 			return 0, 0, fmt.Errorf("Invalid scancode 0x%02X or device 0x%04X for codec %v (the code received was 0x%08X, the scancodes were %02X and %02X)", scancode1, device, codec, value, scancode1, scancode2^0xFF)
 		}
 		return scancode1, device, nil
 	case remotes.CODEC_NEC16:
 		// Check to make sure scancode and reverse of scancode match
-		scancode1 := value & 0x000000F0 >> 4
-		scancode2 := value & 0x0000000F
+		scancode := value & 0x000000FF
 		device := value & 0x0000FF00 >> 8
-		if scancode1 != scancode2^0x000F {
-			return 0, 0, fmt.Errorf("Invalid scancode 0x%02X or device 0x%02X for codec %v (the code received was 0x%04X, the scancodes were %01X and %01X)", scancode1, device, codec, value, scancode1, scancode2^0x0F)
-		}
-		return scancode1, device, nil
+		return scancode, device, nil
 	default:
 		return 0, 0, gopi.ErrBadParameter
 	}
@@ -422,12 +463,14 @@ func (s state) String() string {
 		return "STATE_EXPECT_PULSE"
 	case STATE_EXPECT_SPACE:
 		return "STATE_EXPECT_SPACE"
-	case STATE_EXPECT_END:
-		return "STATE_EXPECT_END"
+	case STATE_EXPECT_END_PULSE:
+		return "STATE_EXPECT_END_PULSE"
+	case STATE_EXPECT_TRAIL_SPACE_17500:
+		return "STATE_EXPECT_TRAIL_SPACE_17500"
+	case STATE_EXPECT_TRAIL_SPACE_35000:
+		return "STATE_EXPECT_TRAIL_SPACE_35000"
 	case STATE_EXPECT_REPEAT_SPACE:
 		return "STATE_EXPECT_REPEAT_SPACE"
-	case STATE_EXPECT_REPEAT_SPACE2:
-		return "STATE_EXPECT_REPEAT_SPACE2"
 	case STATE_EXPECT_REPEAT_PULSE:
 		return "STATE_EXPECT_REPEAT_PULSE"
 	default:

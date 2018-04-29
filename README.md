@@ -12,8 +12,7 @@ schemes:
 
   * Sony 12- 15- and 20- bit (CODEC_SONY12,CODEC_SONY15,CODEC_SONY20)
   * Panasonic (CODEC_PANASONIC)
-  * Legacy Apple TV (CODEC_APPLETV)
-  * NEC 32 bit (CODEC_NEC32)
+  * NEC 32- and 16- bit (CODEC_NEC32, CODEC_NEC16 and CODEC_APPLETV)
   * Philips RC5 (CODEC_RC5) __In development__
 
 It's fairly easy to add other encoding schemes, please see the Appendix below.

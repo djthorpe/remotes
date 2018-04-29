@@ -613,7 +613,12 @@ func fuzzyKeyCodeMatch(keycode *remotes.KeyMapEntry, token string) bool {
 func uniqueKeyMapPath(codec remotes.CodecType, device uint32, root, ext string) string {
 	codec_name := strings.ToLower(strings.TrimPrefix(fmt.Sprint(codec), CODEC_PREFIX))
 	for i := 0; i < 100; i++ {
-		filename := fmt.Sprintf("%v_%08X_%v%v", codec_name, device, i, ext)
+		filename := fmt.Sprintf("%v_%08X", codec_name, device)
+		if i == 0 {
+			filename = filename + ext
+		} else {
+			filename = filename + "_" + fmt.Sprint(i) + ext
+		}
 		path := filepath.Join(root, filename)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return path

@@ -53,7 +53,7 @@ func (m *MarkSpace) GreaterThan(evt gopi.LIRCEvent) bool {
 	if m.Type != evt.Type() {
 		return false
 	}
-	if evt.Value() > m.Max {
+	if evt.Value() < m.Min {
 		return false
 	}
 	return true
@@ -63,7 +63,7 @@ func (m *MarkSpace) LessThan(evt gopi.LIRCEvent) bool {
 	if m.Type != evt.Type() {
 		return false
 	}
-	if evt.Value() < m.Min {
+	if evt.Value() > m.Max {
 		return false
 	}
 	return true

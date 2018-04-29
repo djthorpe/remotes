@@ -173,6 +173,8 @@ func (c CodecType) String() string {
 		return "CODEC_NEC16"
 	case CODEC_NEC32:
 		return "CODEC_NEC32"
+	case CODEC_APPLETV:
+		return "CODEC_APPLETV"
 	case CODEC_NECX:
 		return "CODEC_NECX"
 	case CODEC_SANYO:
