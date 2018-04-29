@@ -138,7 +138,19 @@ func PrintCodecs(reply *pb.CodecsReply) {
 }
 
 func PrintKeymaps(reply *pb.KeyMapsReply) {
-	fmt.Println(reply)
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Keymap", "Codec", "Device", "Repeats", "Keys"})
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	for _, key := range reply.Keymap {
+		table.Append([]string{
+			key.Name,
+			fmt.Sprintf("%s", key.Codec),
+			fmt.Sprintf("%X", key.Device),
+			fmt.Sprintf("%d", key.Repeats),
+			fmt.Sprintf("%d", key.Keys),
+		})
+	}
+	table.Render()
 }
 
 func PrintKeys(reply *pb.KeysReply) {
