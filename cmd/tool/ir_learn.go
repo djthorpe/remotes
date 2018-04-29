@@ -80,9 +80,7 @@ func (this *App) SetKey(keymap *remotes.KeyMap, key *remotes.KeyMapEntry) {
 func (this *App) HandleEvent(evt *remotes.RemoteEvent) error {
 	if this.keymap == nil && this.key == nil && evt == nil {
 		return nil
-	}
-
-	if err := this.db.SetKeyMapEntry(this.keymap, evt.Codec(), evt.Device(), this.key.Keycode, evt.Scancode()); err != nil {
+	} else if err := this.db.SetKeyMapEntry(this.keymap, evt.Codec(), evt.Device(), this.key.Keycode, evt.Scancode()); err != nil {
 		fmt.Printf("\n  %v\n", err)
 	} else {
 		fmt.Printf("\n  Recorded key %v for device 0x%08X and scancode 0x%08X\n", this.key.Keycode, evt.Device(), evt.Scancode())

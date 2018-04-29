@@ -325,7 +325,6 @@ func bitLengthForCodec(codec remotes.CodecType) uint {
 }
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
-	fmt.Printf("codec=%v code=%08X\n", codec, value)
 	switch codec {
 	case remotes.CODEC_SONY12:
 		// 7 scancode bits and 5 device bits
