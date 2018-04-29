@@ -12,6 +12,7 @@ package sony
 // Reference:
 //   http://users.telenet.be/davshomepage/sony.htm
 //   http://picprojects.org.uk/projects/sirc/sonysirc.pdf
+//   https://www.sbprojects.net/knowledge/ir/sirc.php
 //
 // The Sony remote control is based on the Pulse-Width signal coding scheme. The code exists of 12 bits
 // sent on a 40kHz carrier wave. The code starts with a header of 2.4ms or

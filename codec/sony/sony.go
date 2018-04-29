@@ -61,7 +61,7 @@ const (
 )
 
 const (
-	TOLERANCE   = 25    // 25% tolerance on values
+	TOLERANCE   = 35    // 35% tolerance on values
 	TX_DURATION = 45000 // 45ms between each transmission
 )
 
@@ -70,10 +70,9 @@ const (
 
 var (
 	HEADER_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 2400, TOLERANCE)
-	HEADER_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 575, TOLERANCE)
+	ONEZERO_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 575, TOLERANCE)
 	ONE_PULSE     = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1200, TOLERANCE)
 	ZERO_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 575, TOLERANCE)
-	ONEZERO_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 575, TOLERANCE)
 	TRAIL_PULSE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 1200, TOLERANCE)
 	REPEAT_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, TX_DURATION, TOLERANCE)
 )
@@ -212,31 +211,9 @@ FOR_LOOP:
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
 	this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v }", this.codec_type, evt)
-	if this.codec_type == remotes.CODEC_SONY12 {
-		this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v state=%v }", this.codec_type, evt, this.state)
-	}
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
-			this.state = STATE_EXPECT_HEADER_SPACE
-			this.duration += evt.Value()
-		} else {
-			this.Reset()
-		}
-	case STATE_EXPECT_HEADER_SPACE:
-		if HEADER_SPACE.Matches(evt) {
-			this.state = STATE_EXPECT_BIT
-			this.duration += evt.Value()
-		} else {
-			this.Reset()
-		}
-	case STATE_EXPECT_BIT:
-		if ONE_PULSE.Matches(evt) {
-			this.value |= 1
-			this.state = STATE_EXPECT_SPACE
-			this.duration += evt.Value()
-		} else if ZERO_PULSE.Matches(evt) {
-			this.value |= 0
 			this.state = STATE_EXPECT_SPACE
 			this.duration += evt.Value()
 		} else {
@@ -244,35 +221,33 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		}
 	case STATE_EXPECT_SPACE:
 		if ONEZERO_SPACE.Matches(evt) {
-			this.value = this.value << 1
-			this.length = this.length + 1
-			if this.length == this.bit_length {
-				this.state = STATE_EXPECT_REPEAT
-				this.duration += evt.Value()
-			} else {
-				this.state = STATE_EXPECT_BIT
-				this.duration += evt.Value()
-			}
-		} else {
-			this.Reset()
-		}
-	case STATE_EXPECT_TRAIL:
-		if TRAIL_PULSE.Matches(evt) {
-			this.state = STATE_EXPECT_REPEAT
+			this.value <<= 1
+			this.state = STATE_EXPECT_BIT
 			this.duration += evt.Value()
 		} else {
-			this.Reset()
+			REPEAT_SPACE.Set(TX_DURATION-this.duration, TOLERANCE)
+			if REPEAT_SPACE.Matches(evt) && this.length == this.bit_length {
+				this.Emit(this.value, this.repeat)
+				this.value = 0
+				this.length = 0
+				this.duration = 0
+				this.repeat = true
+				this.state = STATE_EXPECT_HEADER_PULSE
+			} else {
+				this.Reset()
+			}
 		}
-	case STATE_EXPECT_REPEAT:
-		// Time for repeat varies
-		REPEAT_SPACE.Set(TX_DURATION-this.duration, TOLERANCE)
-		if REPEAT_SPACE.Matches(evt) {
-			this.Emit(this.value, this.repeat)
-			this.repeat = true
-			this.state = STATE_EXPECT_HEADER_PULSE
-			this.value = 0
-			this.length = 0
-			this.duration = 0
+	case STATE_EXPECT_BIT:
+		if ONE_PULSE.Matches(evt) {
+			this.value |= 1
+			this.length += 1
+			this.state = STATE_EXPECT_SPACE
+			this.duration += evt.Value()
+		} else if ZERO_PULSE.Matches(evt) {
+			this.value |= 0
+			this.length += 1
+			this.state = STATE_EXPECT_SPACE
+			this.duration += evt.Value()
 		} else {
 			this.Reset()
 		}
@@ -350,17 +325,18 @@ func bitLengthForCodec(codec remotes.CodecType) uint {
 }
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
+	fmt.Printf("codec=%v code=%08X\n", codec, value)
 	switch codec {
 	case remotes.CODEC_SONY12:
 		// 7 scancode bits and 5 device bits
-		return (value & 0xFE0) >> 5, (value & 0x01F), nil
+		return (value & 0x0FE0) >> 5, (value & 0x001F), nil
 	case remotes.CODEC_SONY15:
 		// 15 bit codes are similar, with 7 command bits and 8 device bits
 		return (value & 0x7F00) >> 8, (value & 0xFF), nil
 	case remotes.CODEC_SONY20:
-		// TODO
-		// 20 bit codes have 7 command bits, 5 device bits, and 8 extended device bits.
-		return value, 0, nil
+		// 20 bit codes have 7 command bits, 5 device bits, and 8 extended device bits,
+		// assume this is like the 12-bit code, discarding the extended bits for the moment
+		return (value & 0xFE000) >> 13, (value & 0x1F00) >> 8, nil
 	default:
 		return 0, 0, gopi.ErrBadParameter
 	}
