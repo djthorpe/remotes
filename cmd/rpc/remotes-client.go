@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -158,6 +159,7 @@ func PrintKeys(reply *pb.KeysReply) {
 	table.SetHeader([]string{"Key", "Code", "Codec", "Device", "Scancode", "Repeats"})
 	table.SetAutoMergeCells(true)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	sort.Sort(keysByName(reply.Key))
 	for _, key := range reply.Key {
 		table.Append([]string{
 			key.Name,
@@ -170,6 +172,12 @@ func PrintKeys(reply *pb.KeysReply) {
 	}
 	table.Render()
 }
+
+type keysByName []*pb.Key
+
+func (k keysByName) Len() int           { return len(k) }
+func (k keysByName) Swap(i, j int)      { k[i], k[j] = k[j], k[i] }
+func (k keysByName) Less(i, j int) bool { return strings.Compare(k[i].Name, k[j].Name) == -1 }
 
 func Context(app *gopi.AppInstance) (context.Context, context.CancelFunc) {
 	if timeout, _ := app.AppFlags.GetDuration("rpc.timeout"); timeout == 0 {
