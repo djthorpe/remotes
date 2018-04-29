@@ -576,10 +576,7 @@ func (this *db) getTuple(codec remotes.CodecType, device uint32) *tuple {
 func getAllKeycodes() []*remotes.KeyMapEntry {
 	keycodes := make([]*remotes.KeyMapEntry, 0, 100)
 	for c := remotes.KEYCODE_NONE; c < remotes.KEYCODE_MAX; c++ {
-		if name := fmt.Sprint(c); strings.HasPrefix(name, KEYCODE_PREFIX) {
-			// Convert name into words
-			name = strings.ToLower(strings.TrimPrefix(name, KEYCODE_PREFIX))
-			name = strings.Title(strings.Replace(name, "_", " ", -1))
+		if name := defaultKeyName(c); name != "" {
 			// Append keycode
 			keycodes = append(keycodes, &remotes.KeyMapEntry{
 				Scancode: remotes.SCANCODE_UNKNOWN,
@@ -631,8 +628,15 @@ func defaultKeyName(keycode remotes.RemoteCode) string {
 		// Invalid key
 		return ""
 	} else {
-		name = strings.TrimLeft(name, KEYCODE_PREFIX)
-		name = strings.Replace(name, "_", " ", -1)
-		return strings.Title(strings.ToLower(name))
+		name = strings.ToLower(strings.TrimPrefix(name, KEYCODE_PREFIX))
+		name = strings.Title(strings.Replace(name, "_", " ", -1))
+		name = strings.Replace(name, " Hdmi", " HDMI", -1)
+		name = strings.Replace(name, " Pc", " PC", -1)
+		name = strings.Replace(name, " Aux", " AUX", -1)
+		name = strings.Replace(name, " Cd", " CD", -1)
+		name = strings.Replace(name, " Dvd", " DVD", -1)
+		name = strings.Replace(name, " Pip", " PIP", -1)
+		name = strings.Replace(name, " 10plus", " 10+", -1)
+		return name
 	}
 }
