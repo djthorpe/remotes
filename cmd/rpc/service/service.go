@@ -13,7 +13,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
@@ -24,41 +23,6 @@ import (
 	pb "github.com/djthorpe/remotes/protobuf/remotes"
 	ptype "github.com/golang/protobuf/ptypes"
 )
-
-////////////////////////////////////////////////////////////////////////////////
-// INIT
-
-func init() {
-	// Register service/remotes:grpc
-	gopi.RegisterModule(gopi.Module{
-		Name:     "service/remotes:grpc",
-		Type:     gopi.MODULE_TYPE_SERVICE,
-		Requires: []string{"rpc/server", "keymap"},
-		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
-			return gopi.Open(Service{
-				Server:  app.ModuleInstance("rpc/server").(gopi.RPCServer),
-				KeyMaps: app.ModuleInstance("keymap").(remotes.KeyMaps),
-			}, app.Logger)
-		},
-		Run: func(app *gopi.AppInstance, driver gopi.Driver) error {
-			// Register codecs with driver. Codecs have OTHER as module type
-			// and name starting with "remotes/"
-			for _, module := range gopi.ModulesByType(gopi.MODULE_TYPE_OTHER) {
-				if strings.HasPrefix(module.Name, "remotes/") {
-					if codec, ok := app.ModuleInstance(module.Name).(remotes.Codec); ok && codec != nil {
-						driver.(*service).registerCodec(codec)
-					}
-				}
-			}
-			// Load KeyMaps
-			if err := driver.(*service).loadKeyMaps(); err != nil {
-				return err
-			}
-			// Success
-			return nil
-		},
-	})
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
@@ -240,7 +204,7 @@ func (this *service) LookupKeys(ctx context.Context, in *pb.LookupKeysRequest) (
 // STRINGIFY
 
 func (this *service) String() string {
-	return fmt.Sprintf("grpc.service.remotes{ codecs=%v }", this.codecs)
+	return fmt.Sprintf("grpc.service.remotes{ codecs=%v keymaps=%v }", this.codecs, this.keymaps)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
