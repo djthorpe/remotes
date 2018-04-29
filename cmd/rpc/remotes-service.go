@@ -11,6 +11,7 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -20,12 +21,12 @@ import (
 	_ "github.com/djthorpe/gopi/sys/logger"
 	_ "github.com/djthorpe/gopi/sys/rpc/grpc"
 	_ "github.com/djthorpe/gopi/sys/rpc/mdns"
+	_ "github.com/djthorpe/remotes/keymap"
 
 	// RPC Services
 	_ "github.com/djthorpe/remotes/cmd/rpc/service"
 
 	// Remote Codecs
-	_ "github.com/djthorpe/remotes/codec/appletv"
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
 	_ "github.com/djthorpe/remotes/codec/sony"
@@ -33,9 +34,21 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
+func codecs() []string {
+	codecs := make([]string, 0)
+	// Obtain all the codecs
+	for _, module := range gopi.ModulesByType(gopi.MODULE_TYPE_OTHER) {
+		if strings.HasPrefix(module.Name, "remotes/") {
+			codecs = append(codecs, module.Name)
+		}
+	}
+	return codecs
+}
+
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("service/remotes:grpc", "remotes/appletv", "remotes/panasonic", "remotes/nec32", "remotes/sony12", "remotes/sony15")
+	modules := append(codecs(), "service/remotes:grpc", "keymap")
+	config := gopi.NewAppConfig(modules...)
 
 	// Set the RPCServiceRecord for server discovery
 	config.Service = "remotes"

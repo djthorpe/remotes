@@ -33,11 +33,11 @@ func init() {
 	gopi.RegisterModule(gopi.Module{
 		Name:     "service/remotes:grpc",
 		Type:     gopi.MODULE_TYPE_SERVICE,
-		Requires: []string{"rpc/server"},
+		Requires: []string{"rpc/server", "keymap"},
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
 			return gopi.Open(Service{
-				Server: app.ModuleInstance("rpc/server").(gopi.RPCServer),
-				App:    app,
+				Server:  app.ModuleInstance("rpc/server").(gopi.RPCServer),
+				KeyMaps: app.ModuleInstance("keymap").(remotes.KeyMaps),
 			}, app.Logger)
 		},
 		Run: func(app *gopi.AppInstance, driver gopi.Driver) error {
@@ -50,6 +50,10 @@ func init() {
 					}
 				}
 			}
+			// Load KeyMaps
+			if err := driver.(*service).loadKeyMaps(); err != nil {
+				return err
+			}
 			// Success
 			return nil
 		},
@@ -60,15 +64,16 @@ func init() {
 // TYPES
 
 type Service struct {
-	Server gopi.RPCServer
-	App    *gopi.AppInstance
+	Server  gopi.RPCServer
+	KeyMaps remotes.KeyMaps
 }
 
 type service struct {
-	log    gopi.Logger
-	done   *evt.PubSub
-	merger evt.EventMerger
-	codecs map[remotes.CodecType]remotes.Codec
+	log     gopi.Logger
+	done    *evt.PubSub
+	merger  evt.EventMerger
+	codecs  map[remotes.CodecType]remotes.Codec
+	keymaps remotes.KeyMaps
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -76,13 +81,14 @@ type service struct {
 
 // Open the server
 func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<grpc.service.remotes>Open{ server=%v }", config.Server)
+	log.Debug("<grpc.service.remotes>Open{ server=%v keymaps=%v }", config.Server, config.KeyMaps)
 
 	this := new(service)
 	this.log = log
 	this.done = evt.NewPubSub(1)
 	this.codecs = make(map[remotes.CodecType]remotes.Codec, 10)
 	this.merger = evt.NewEventMerger()
+	this.keymaps = config.KeyMaps
 
 	// Register service with server
 	config.Server.Register(this)
@@ -108,7 +114,7 @@ func (this *service) Close() error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// REGISTER CODECS
+// REGISTER CODECS, LOAD & SAVE KEYMAPS
 
 func (this *service) registerCodec(codec remotes.Codec) {
 	this.log.Debug2("<grpc.service.remotes>RegisterCodec{ codec=%v }", codec)
@@ -122,13 +128,33 @@ func (this *service) registerCodec(codec remotes.Codec) {
 	}
 }
 
+func (this *service) loadKeyMaps() error {
+	return this.keymaps.LoadKeyMaps(func(filename string, keymap *remotes.KeyMap) {
+		this.log.Info("Loading: %v (%v)", filename, keymap.Name)
+	})
+}
+
+func (this *service) saveKeyMaps() error {
+	return this.keymaps.SaveModifiedKeyMaps(func(filename string, keymap *remotes.KeyMap) {
+		this.log.Info("Saving: %v (%v)", filename, keymap.Name)
+	})
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // RPC SERVICE INTERFACE IMPLEMENTATION
 
 func (this *service) CancelRequests() error {
 	this.log.Debug2("<grpc.service.remotes>CancelRequests{}")
+
 	// Cancel any streaming requests
 	this.done.Emit(evt.NullEvent)
+
+	// Save any modified keymaps
+	if err := this.saveKeyMaps(); err != nil {
+		return err
+	}
+
+	// Return success
 	return nil
 }
 
@@ -189,6 +215,27 @@ func (this *service) Codecs(ctx context.Context, in *pb.EmptyRequest) (*pb.Codec
 	return toProtobufCodecsReply(this.codecs), nil
 }
 
+func (this *service) KeyMaps(ctx context.Context, in *pb.EmptyRequest) (*pb.KeyMapsReply, error) {
+	return toProtobufKeyMapsReply(this.keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, "")), nil
+}
+
+func (this *service) Keys(ctx context.Context, in *pb.KeysRequest) (*pb.KeysReply, error) {
+	// Obtain the keymap
+	if in.Name == "" {
+		return nil, gopi.ErrBadParameter
+	} else if keymaps := this.keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, in.Name); len(keymaps) == 0 {
+		return nil, remotes.ErrNotFound
+	} else if len(keymaps) > 1 {
+		return nil, remotes.ErrAmbiguous
+	} else {
+		return toProtobufKeysReply(this.keymaps.GetKeyMapEntry(keymaps[0], remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, remotes.KEYCODE_NONE, remotes.SCANCODE_UNKNOWN)), nil
+	}
+}
+
+func (this *service) LookupKeys(ctx context.Context, in *pb.LookupKeysRequest) (*pb.KeysReply, error) {
+	return toProtobufKeysReply(this.keymaps.LookupKeyCode(in.Terms...)), nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
@@ -199,12 +246,53 @@ func (this *service) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // PROTOBUF CONVERSION
 
+func toProtobufKeysReply(entries []*remotes.KeyMapEntry) *pb.KeysReply {
+	reply := &pb.KeysReply{
+		Key: make([]*pb.Key, len(entries)),
+	}
+	for i, entry := range entries {
+		reply.Key[i] = &pb.Key{
+			Name:     entry.Name,
+			Keycode:  fmt.Sprint(entry.Keycode),
+			Scancode: entry.Scancode,
+			Device:   entry.Device,
+			Codec:    pb.CodecType(entry.Type),
+			Repeats:  uint32(entry.Repeats),
+		}
+	}
+	return reply
+}
+
 func toProtobufCodecsReply(codecs map[remotes.CodecType]remotes.Codec) *pb.CodecsReply {
 	reply := &pb.CodecsReply{
 		Codec: make([]pb.CodecType, 0, len(codecs)),
 	}
 	for k := range codecs {
 		reply.Codec = append(reply.Codec, pb.CodecType(k))
+	}
+	return reply
+}
+
+func toProtobufKeyMapsReply(keymaps []*remotes.KeyMap) *pb.KeyMapsReply {
+	// Create the reply
+	reply := &pb.KeyMapsReply{
+		Keymap: make([]*pb.KeyMapsReply_KeyMapInfo, 0, len(keymaps)),
+	}
+	// Populate the reply
+	for _, keymap := range keymaps {
+		reply.Keymap = append(reply.Keymap, toProtobufKeyMapsReplyInfo(keymap))
+	}
+	// Return the reply
+	return reply
+}
+
+func toProtobufKeyMapsReplyInfo(keymap *remotes.KeyMap) *pb.KeyMapsReply_KeyMapInfo {
+	reply := &pb.KeyMapsReply_KeyMapInfo{
+		Name:    keymap.Name,
+		Codec:   pb.CodecType(keymap.Type),
+		Device:  keymap.Device,
+		Repeats: uint32(keymap.Repeats),
+		Keys:    uint32(len(keymap.Map)),
 	}
 	return reply
 }

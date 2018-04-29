@@ -12,8 +12,14 @@ service Remotes {
     // Return array of codecs supported
     rpc Codecs (EmptyRequest) returns (CodecsReply);
 
-	// Return array of keymaps supported
-	//rpc Keymaps (KeymapsRequest) returns (KeymapsReply);
+	// Return array of keymaps learnt
+	rpc KeyMaps (EmptyRequest) returns (KeyMapsReply);
+
+	// Return keys learnt by keymap name
+	rpc Keys (KeysRequest) returns (KeysReply);
+
+	// Return all possible keys with one or more search terms
+	rpc LookupKeys (LookupKeysRequest) returns (KeysReply);
 
 	// Return a new empty keymap
 	//rpc CreateKeymap (CreateKeymapRequest) returns (KeymapsReply);
@@ -137,6 +143,40 @@ message CodecsReply {
     repeated CodecType codec = 1;
 }
 
-//message KeymapsReply {
-//	repeated KeyMap keymap = 1;
-//}
+/////////////////////////////////////////////////////////////////////
+// KEYMAPS REPLY
+
+message KeyMapsReply {
+	message KeyMapInfo {
+		string name = 1;
+		CodecType codec = 2;
+		uint32 device = 3;
+		uint32 repeats = 4;	
+		uint32 keys = 5; // Number of learnt keys
+    }
+	repeated KeyMapInfo keymap = 1;
+}
+
+/////////////////////////////////////////////////////////////////////
+// LOOKUP ALL KEYS FOR A KEYMAP
+
+message Key {
+	string name = 1;
+	string keycode = 2;
+	CodecType codec = 3;
+	uint32 device = 4;
+	uint32 scancode = 5;
+	uint32 repeats = 6;		
+}
+
+message KeysRequest {
+	string name = 1;
+}
+
+message LookupKeysRequest {
+	repeated string terms = 1;
+}
+
+message KeysReply {
+	repeated Key key = 1;	
+}

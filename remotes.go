@@ -130,6 +130,8 @@ type KeyMaps interface {
 var (
 	ErrInvalidKey      = errors.New("Invalid Key")
 	ErrDuplicateKeyMap = errors.New("Duplicate KeyMap")
+	ErrNotFound        = errors.New("Not Found")
+	ErrAmbiguous       = errors.New("Ambiguous Parameter")
 )
 
 /////////////////////////////////////////////////////////////////////
@@ -187,8 +189,6 @@ func (c CodecType) String() string {
 		return "CODEC_RC6_MCE"
 	case CODEC_SHARP:
 		return "CODEC_SHARP"
-	case CODEC_APPLETV:
-		return "CODEC_APPLETV"
 	case CODEC_PANASONIC:
 		return "CODEC_PANASONIC"
 	default:

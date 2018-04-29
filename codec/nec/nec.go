@@ -61,8 +61,8 @@ const (
 )
 
 const (
-	TOLERANCE    = 25     // 25% tolerance on values
-	APPLETV_CODE = 0x77E1 // The device code used by the AppleTV
+	TOLERANCE    = 25 // 25% tolerance on values
+	APPLETV_CODE = 0x77E1
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -301,35 +301,38 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 	this.log.Debug("<remotes.Codec.NEC>Send{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
 
+	// 9ms leading pulse burst and 4.5ms space
+	pulses := make([]uint32, 0, 100)
+	pulses = append(pulses, HEADER_PULSE.Value, HEADER_SPACE.Value)
+
 	switch this.codec_type {
 	case remotes.CODEC_NEC32:
-		if device&0xFFFFFF00 != 0 {
+		// Ignore AppleTV devices in the NEC32 version
+		if device == APPLETV_CODE {
+			return gopi.ErrBadParameter
+		}
+		// Ensure the device is 16 bits and the scancode is 8 bits
+		if uint32(uint16(device)) != device {
 			this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
 			return gopi.ErrBadParameter
-		} else {
-			device = (device & 0xFF)
-			device |= (device ^ 0xFF) << 8
+		}
+		if uint32(uint8(scancode)) != scancode {
+			this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
+			return gopi.ErrBadParameter
 		}
 	case remotes.CODEC_APPLETV:
-		if device != APPLETV_CODE {
+		// Ensure device code is 8 bits and scancode is 8 bits
+		if uint32(uint8(device)) != device {
 			this.log.Error("<remotes.Codec.NEC> Send: Invalid device parameter")
 			return gopi.ErrBadParameter
-		} else {
-			device = (APPLETV_CODE&0xFF)<<8 | (APPLETV_CODE&0xFF00)>>8
+		}
+		if uint32(uint8(scancode)) != scancode {
+			this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
+			return gopi.ErrBadParameter
 		}
 	default:
 		return gopi.ErrNotImplemented
 	}
-
-	if scancode&0xFFFFFF00 != 0 {
-		this.log.Error("<remotes.Codec.NEC> Send: Invalid scancode parameter")
-		return gopi.ErrBadParameter
-	}
-
-	pulses := make([]uint32, 0, 100)
-
-	// 9ms leading pulse burst and 4.5ms space
-	pulses = append(pulses, HEADER_PULSE.Value, HEADER_SPACE.Value)
 
 	// device and scancode
 	pulses = this.sendbyte(pulses, uint8(device&0x00FF))
@@ -375,6 +378,8 @@ func bitLengthForCodec(codec remotes.CodecType) uint {
 	switch codec {
 	case remotes.CODEC_NEC32:
 		return 32
+	case remotes.CODEC_NEC16:
+		return 16
 	case remotes.CODEC_APPLETV:
 		return 32
 	default:
@@ -384,26 +389,24 @@ func bitLengthForCodec(codec remotes.CodecType) uint {
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
 	switch codec {
-	case remotes.CODEC_APPLETV:
-		remote := value & 0xFFFF0000 >> 16
-		if remote != APPLETV_CODE {
-			return 0, 0, gopi.ErrBadParameter
-		} else {
-			scancode := value & 0x0000FF00 >> 8
-			device := value & 0xFFFF0000 >> 16
-			return scancode, device, nil
-		}
 	case remotes.CODEC_NEC32:
-		if (value & 0xFFFF0000 >> 16) == APPLETV_CODE {
-			return 0, 0, gopi.ErrBadParameter
+		// Check to make sure scancode and reverse of scancode match
+		scancode1 := value & 0x0000FF00 >> 8
+		scancode2 := value & 0x000000FF
+		device := value & 0xFFFF0000 >> 16
+		if scancode1 != scancode2^0x00FF {
+			return 0, 0, fmt.Errorf("Invalid scancode 0x%02X or device 0x%04X for codec %v (the code received was 0x%08X, the scancodes were %02X and %02X)", scancode1, device, codec, value, scancode1, scancode2^0xFF)
 		}
-		value2 := value ^ 0x00FF00FF
-		if (value2 & 0x00FF00FF) != (value & 0xFF00FF00 >> 8) {
-			return 0, 0, fmt.Errorf("Invalid scancode or device 0x%08X for codec %v", value, codec)
+		return scancode1, device, nil
+	case remotes.CODEC_NEC16:
+		// Check to make sure scancode and reverse of scancode match
+		scancode1 := value & 0x000000F0 >> 4
+		scancode2 := value & 0x0000000F
+		device := value & 0x0000FF00 >> 8
+		if scancode1 != scancode2^0x000F {
+			return 0, 0, fmt.Errorf("Invalid scancode 0x%02X or device 0x%02X for codec %v (the code received was 0x%04X, the scancodes were %01X and %01X)", scancode1, device, codec, value, scancode1, scancode2^0x0F)
 		}
-		scan := value & 0x0000FF00 >> 8
-		device := value & 0xFF000000 >> 24
-		return scan, device, nil
+		return scancode1, device, nil
 	default:
 		return 0, 0, gopi.ErrBadParameter
 	}

@@ -21,6 +21,7 @@ import (
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
+	"github.com/olekukonko/tablewriter"
 
 	// Modules
 	_ "github.com/djthorpe/gopi/sys/logger"
@@ -48,6 +49,8 @@ var (
 	methods = map[string]MethodFunc{
 		"receive": Receive,
 		"codecs":  Codecs,
+		"keymaps": Keymaps,
+		"keys":    Keys,
 		"send":    Send,
 	}
 )
@@ -134,6 +137,28 @@ func PrintCodecs(reply *pb.CodecsReply) {
 	}
 }
 
+func PrintKeymaps(reply *pb.KeyMapsReply) {
+	fmt.Println(reply)
+}
+
+func PrintKeys(reply *pb.KeysReply) {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Key", "Code", "Codec", "Device", "Scancode", "Repeats"})
+	table.SetAutoMergeCells(true)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	for _, key := range reply.Key {
+		table.Append([]string{
+			key.Name,
+			key.Keycode,
+			fmt.Sprintf("%s", key.Codec),
+			fmt.Sprintf("%X", key.Device),
+			fmt.Sprintf("%X", key.Scancode),
+			fmt.Sprintf("%d", key.Repeats),
+		})
+	}
+	table.Render()
+}
+
 func Context(app *gopi.AppInstance) (context.Context, context.CancelFunc) {
 	if timeout, _ := app.AppFlags.GetDuration("rpc.timeout"); timeout == 0 {
 		return context.WithCancel(context.Background())
@@ -188,6 +213,51 @@ func Codecs(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{
 	} else {
 		PrintCodecs(reply)
 		return nil
+	}
+}
+
+func Keymaps(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{}) error {
+	// Create the context with cancel
+	ctx, cancel := Context(app)
+
+	// Call cancel in the background when done is received
+	go func() {
+		<-done
+		cancel()
+	}()
+
+	if reply, err := service.KeyMaps(ctx, &pb.EmptyRequest{}); err != nil {
+		return err
+	} else {
+		PrintKeymaps(reply)
+		return nil
+	}
+}
+
+func Keys(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{}) error {
+	// Create the context with cancel
+	ctx, cancel := Context(app)
+
+	// Call cancel in the background when done is received
+	go func() {
+		<-done
+		cancel()
+	}()
+
+	if keymap, exists := app.AppFlags.GetString("keymap"); exists == false || keymap == "" {
+		if reply, err := service.LookupKeys(ctx, &pb.LookupKeysRequest{}); err != nil {
+			return err
+		} else {
+			PrintKeys(reply)
+			return nil
+		}
+	} else {
+		if reply, err := service.Keys(ctx, &pb.KeysRequest{Name: keymap}); err != nil {
+			return err
+		} else {
+			PrintKeys(reply)
+			return nil
+		}
 	}
 }
 
@@ -277,6 +347,7 @@ func main() {
 	config := gopi.NewAppConfig("rpc/clientconn")
 
 	// Set send flags
+	config.AppFlags.FlagString("keymap", "", "Keymap name")
 	config.AppFlags.FlagString("codec", "", "Send Codec")
 	config.AppFlags.FlagUint("device", 0, "Send device")
 	config.AppFlags.FlagUint("code", 0, "Send scancode")
