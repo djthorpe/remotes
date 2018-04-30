@@ -18,7 +18,7 @@ http://www.remotecentral.com/cgi-bin/mboard/rc-pronto/thread.cgi?26152
   * A one bit:
   *   450ns pulse, 1.3ms space
   * A zero bit:
-  *   450ns pulse, 450ns pulse
+  *   450ns pulse, 450ns space
   * Trail pulse of 450ns, a repeat space is 75ms then repeat the code
   *
   * It's 48 bits long (6 bytes)

@@ -263,7 +263,60 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
-	return gopi.ErrNotImplemented
+	this.log.Debug2("<remotes.Codec.Panasonic>Send{ device=0x%08X scancode=0x%08X repeats=%v }", device, scancode, repeats)
+
+	// Header Pulse of 3.5ms, then space of 1.7ms
+	pulses := make([]uint32, 0, 100)
+	pulses = append(pulses, HEADER_PULSE.Value, HEADER_SPACE.Value)
+
+	for i := uint(0); i < (repeats + 1); i++ {
+		// Send preamble
+		pulses = this.sendbyte(pulses, byte(PREAMBLE>>8))
+		pulses = this.sendbyte(pulses, byte(PREAMBLE&0xFF))
+
+		// Send device
+		if device&0xFFFF0000 != 0 {
+			this.log.Debug("remotes.Codec.Panasonic>Send: Invalid device parameter")
+			return gopi.ErrBadParameter
+		}
+		pulses = this.sendbyte(pulses, byte(device>>8))
+		pulses = this.sendbyte(pulses, byte(device&0xFF))
+
+		// Send scancode
+		if scancode&0xFFFFFF00 != 0 {
+			this.log.Debug("remotes.Codec.Panasonic>Send: Invalid scancode parameter")
+			return gopi.ErrBadParameter
+		}
+		pulses = this.sendbyte(pulses, byte(scancode))
+
+		// Send checksum
+		ck := byte(device>>8) ^ byte(device&0xFF) ^ byte(scancode)
+		pulses = this.sendbyte(pulses, byte(ck))
+
+		// Send trail pulse
+		pulses = append(pulses, TRAIL_PULSE.Value)
+
+		// If repeats > 0 then send repeats space
+		if repeats > 0 && i < repeats {
+			pulses = append(pulses, REPEAT_SPACE.Value)
+		}
+	}
+	return this.lirc.PulseSend(pulses)
+}
+
+func (this *codec) sendbyte(pulses []uint32, value uint8) []uint32 {
+	for i := 0; i < 8; i++ {
+		pulses = append(pulses, BIT_PULSE.Value)
+		if value&0x80 == 0 {
+			// Send zero
+			pulses = append(pulses, ZERO_SPACE.Value)
+		} else {
+			// Send one
+			pulses = append(pulses, ONE_SPACE.Value)
+		}
+		value <<= 1
+	}
+	return pulses
 }
 
 ////////////////////////////////////////////////////////////////////////////////

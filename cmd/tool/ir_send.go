@@ -94,7 +94,7 @@ func DisplayDeviceEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppI
 	return err
 }
 
-func Send(device string, keymaps remotes.KeyMaps, args []string) error {
+func Send(device string, keymaps remotes.KeyMaps, args []string, repeats uint, repeats_override bool) error {
 	var once sync.Once
 
 	// Get keymap for device
@@ -119,7 +119,10 @@ func Send(device string, keymaps remotes.KeyMaps, args []string) error {
 			}
 			return fmt.Errorf("Ambiguous key: %v (It could mean one of %v)", arg, strings.TrimSuffix(ambigious, ","))
 		} else {
-			// TODO: Repeats
+			// Override the repeats value
+			if repeats_override {
+				entries[0].Repeats = repeats
+			}
 			// Perform the send
 			once.Do(DisplayEntryHeader)
 			DisplayEntry(entries[0])
@@ -173,6 +176,10 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		return err
 	}
 
+	// Repeats override
+	repeats, repeats_override := app.AppFlags.GetUint("repeats")
+
+	// Device
 	if device, exists := app.AppFlags.GetString("device"); exists == false {
 		if err := DisplayKeymaps(keymaps, app); err != nil {
 			done <- gopi.DONE
@@ -180,7 +187,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		}
 	} else if args := app.AppFlags.Args(); len(args) > 0 {
 		// Send keycodes
-		if err := Send(device, keymaps, args); err != nil {
+		if err := Send(device, keymaps, args, repeats, repeats_override); err != nil {
 			done <- gopi.DONE
 			return err
 		}
@@ -216,6 +223,7 @@ func main() {
 	codecs := append(codecs(), "keymap")
 	config := gopi.NewAppConfig(codecs...)
 	config.AppFlags.FlagString("device", "", "Name of device to send codes to")
+	config.AppFlags.FlagUint("repeats", 0, "Number of code repeats (overrides default)")
 
 	// Make the send channel
 	send = make(chan *remotes.KeyMapEntry)
