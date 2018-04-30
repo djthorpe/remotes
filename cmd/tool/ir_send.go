@@ -106,7 +106,6 @@ func Send(device string, keymaps remotes.KeyMaps, args []string, repeats uint, r
 	// For each argument, return the set of keys and then match those keys
 	// to a single entry or else the argument is ambiguous
 	allkeys := strings.Split(strings.Join(args, ","), ",")
-	fmt.Println(allkeys)
 	for _, arg := range allkeys {
 		entries := make([]*remotes.KeyMapEntry, 0, 1)
 		for _, key := range keymaps.LookupKeyCode(arg) {
@@ -220,6 +219,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 	// Wait for interrupt
 	app.Logger.Info("Waiting for CTRL+C or SIGTERM to end")
+	// TODO Remove this timeout and end property
 	app.WaitForSignalOrTimeout(500 * time.Millisecond)
 
 	// Save

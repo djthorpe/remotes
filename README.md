@@ -106,8 +106,8 @@ extension `.keymap`. The command-line tools are invoked as follows:
 
 ```
   ir_rcv <common flags>
-  ir_learn <command flags> -device <device_name> -key <key_list>
-  ir_send <command flags> -device <device_name> <key_list>  
+  ir_learn <common flags> -device <device_name> -repeats <n> -multicodec <key_list>
+  ir_send <common flags> -device <device_name> -repeats <n> <key_list>  
 ```
 
 You can use the following optional common flags with all the binaries:
@@ -170,11 +170,11 @@ This will cycle through all keys and will prompt you to press a key on your remo
 If you don't press the key within a few seconds, no mapping is created and the next key is
 learnt. Press the CTRL+C combination in order to abort the learning without saving.
 
-You can learn specific keys by using the `-key` flag. For example, to learn the keypad digits
+You can learn specific keys by including keys as arguments. For example, to learn the keypad digits
 and the navigation buttons use:
 
 ```
-  bash% ir_learn -device "DVD Player" -key keypad,nav,play,pause,stop
+  bash% ir_learn -device "DVD Player" keypad,nav,play,pause,stop
 ```
 
 You can re-invoke the tool with the same device name to modify existing key mappings. Once the
@@ -219,7 +219,7 @@ NAME                 CODEC                DEVICE     KEYS    REPEATS
 appletv              CODEC_APPLETV        0x0000009F       6       3
 ```
 
-Finally you can invoke it with one or more arguments to send an IR command. 
+Finally and most importantly, you can invoke it with one or more arguments to send an IR command. 
 If you have some ambigious key names, then you'll need to modify what you use on the command line 
 to specify a key more exactly. For example,
 
@@ -233,7 +233,13 @@ KEY                  CODE                      CODEC             DEVICE     SCAN
 Volume Down          KEYCODE_VOLUME_DOWN       CODEC_APPLETV     0x0000009F 0x000000B0       3
 ```
 
-To clean up the database, you can edit the XML files under `/var/local/remotes`.
+There are some cases where a single remote outputs different types of encoding. For example,
+I have a Sony TV remote which does this. In order to learn both sets of encodings for a single
+"device" use the `-multicodec` flag when learning the new encoded commands, or just switch it
+on before learning new commands.
+
+If you have any problems with the database, you can clean up the individual files which are simple
+XML files usually stored under `/var/local/remotes` unless you've changed the path.
 
 ## Running Microservices
 

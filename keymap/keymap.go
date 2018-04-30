@@ -54,6 +54,12 @@ type tuple struct {
 	modified bool
 }
 
+// (entry,keymap)
+type etuple struct {
+	entry  *remotes.KeyMapEntry
+	keymap *remotes.KeyMap
+}
+
 // callback function for allKeyMaps
 type allKeyMapsFunc func(*tuple) bool
 
@@ -520,31 +526,6 @@ func (this *db) LookupKeyMapEntry(codec remotes.CodecType, device uint32, scanco
 	}
 }
 
-func appendKeyMapEntry(array []*remotes.KeyMapEntry, entry *remotes.KeyMapEntry, keymap *remotes.KeyMap) []*remotes.KeyMapEntry {
-	new_entry := &remotes.KeyMapEntry{
-		Scancode: entry.Scancode,
-		Keycode:  entry.Keycode,
-		Name:     entry.Name,
-		Device:   entry.Device,
-		Type:     entry.Type,
-		Repeats:  entry.Repeats,
-	}
-	// Override some values if they are empty
-	if new_entry.Name == "" {
-		new_entry.Name = defaultKeyName(entry.Keycode)
-	}
-	if new_entry.Device == 0 || new_entry.Device == remotes.DEVICE_UNKNOWN {
-		new_entry.Device = keymap.Device
-	}
-	if new_entry.Type == remotes.CODEC_NONE {
-		new_entry.Type = keymap.Type
-	}
-	if new_entry.Repeats == 0 {
-		new_entry.Repeats = keymap.Repeats
-	}
-	return append(array, new_entry)
-}
-
 /////////////////////////////////////////////////////////////////////
 // SET PARAMETERS
 
@@ -597,11 +578,35 @@ func (this *db) SetMultiCodec(keymap *remotes.KeyMap, flag bool) error {
 		tuple.modified = true
 		return nil
 	}
-
 }
 
 /////////////////////////////////////////////////////////////////////
 // PRIVATE METHODS
+
+func appendKeyMapEntry(array []*remotes.KeyMapEntry, entry *remotes.KeyMapEntry, keymap *remotes.KeyMap) []*remotes.KeyMapEntry {
+	new_entry := &remotes.KeyMapEntry{
+		Scancode: entry.Scancode,
+		Keycode:  entry.Keycode,
+		Name:     entry.Name,
+		Device:   entry.Device,
+		Type:     entry.Type,
+		Repeats:  entry.Repeats,
+	}
+	// Override some values if they are empty
+	if new_entry.Name == "" {
+		new_entry.Name = defaultKeyName(entry.Keycode)
+	}
+	if new_entry.Device == 0 || new_entry.Device == remotes.DEVICE_UNKNOWN {
+		new_entry.Device = keymap.Device
+	}
+	if new_entry.Type == remotes.CODEC_NONE {
+		new_entry.Type = keymap.Type
+	}
+	if new_entry.Repeats == 0 {
+		new_entry.Repeats = keymap.Repeats
+	}
+	return append(array, new_entry)
+}
 
 func (this *db) registerNewKeyMap(path string, keymap *remotes.KeyMap, modified bool) error {
 
@@ -620,12 +625,18 @@ func (this *db) registerNewKeyMap(path string, keymap *remotes.KeyMap, modified 
 	mapping := this.keymap[keymap.Type]
 	if _, exists := mapping[keymap.Device]; exists {
 		return remotes.ErrDuplicateKeyMap
-	} else {
-		mapping[keymap.Device] = &tuple{
-			path:     path,
-			keymap:   keymap,
-			modified: modified,
-		}
+	}
+
+	// Index keymap
+	if err := this.indexKeyMap(keymap); err != nil {
+		return err
+	}
+
+	// Create the mapping
+	mapping[keymap.Device] = &tuple{
+		path:     path,
+		keymap:   keymap,
+		modified: modified,
 	}
 
 	// Success
@@ -642,6 +653,17 @@ func (this *db) allKeyMaps(callback allKeyMapsFunc) []*remotes.KeyMap {
 		}
 	}
 	return keymaps
+}
+
+func (this *db) indexKeyMap(keymap *remotes.KeyMap) error {
+	// Check parameters
+	if keymap == nil || len(keymap.Map) == 0 {
+		return gopi.ErrBadParameter
+	}
+	// TODO
+	//fmt.Println("TODO: Index", keymap.Name)
+	// Return success
+	return nil
 }
 
 func (this *db) getTuple(codec remotes.CodecType, device uint32) *tuple {
