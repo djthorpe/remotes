@@ -201,7 +201,7 @@ FOR_LOOP:
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
 	this.log.Debug2("<remotes.Codec.RC5.Receive>{ type=%v state=%v evt=%v }", this.codec_type, this.state, evt)
-	fmt.Println(this.state, evt)
+	//fmt.Println(this.state, evt)
 	switch this.state {
 	case STATE_EXPECT_FIRST_PULSE:
 		if LONG_PULSE.Matches(evt) {

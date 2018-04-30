@@ -57,9 +57,9 @@ const (
 )
 
 const (
-	TOLERANCE  = 25 // 25% tolerance on values
+	TOLERANCE  = 35 // 35% tolerance on values
 	BIT_LENGTH = 48
-	PREAMBLE   = 0x40040D00
+	PREAMBLE   = 0x4004
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,11 +68,11 @@ const (
 var (
 	HEADER_PULSE = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 3500, TOLERANCE)
 	HEADER_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1700, TOLERANCE)
-	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 470, TOLERANCE)
+	BIT_PULSE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 450, TOLERANCE)
 	ONE_SPACE    = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1300, TOLERANCE)
-	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 440, TOLERANCE)
-	TRAIL_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 500, TOLERANCE)
-	TRAIL_SPACE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 74387, TOLERANCE)
+	ZERO_SPACE   = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 450, TOLERANCE)
+	TRAIL_PULSE  = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 450, TOLERANCE)
+	REPEAT_SPACE = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 75000, TOLERANCE)
 )
 
 var (
@@ -221,11 +221,12 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		}
 	case STATE_EXPECT_SPACE:
 		// Register a zero or one
+		this.value <<= 1
 		if ZERO_SPACE.Matches(evt) {
-			this.value = (this.value << 1) | 0
+			this.value |= 0
 			this.length = this.length + 1
 		} else if ONE_SPACE.Matches(evt) {
-			this.value = (this.value << 1) | 1
+			this.value |= 1
 			this.length = this.length + 1
 		} else {
 			this.Reset()
@@ -245,7 +246,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 			this.Reset()
 		}
 	case STATE_EXPECT_REPEAT:
-		if TRAIL_SPACE.Matches(evt) {
+		if REPEAT_SPACE.Matches(evt) {
 			this.repeat = true
 			this.state = STATE_EXPECT_HEADER_PULSE
 			this.value = 0
@@ -269,13 +270,21 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 // PRIVATE METHODS
 
 func codeForCodec(value uint64) (uint32, uint32, error) {
-	preamble := uint32(value >> 16)
-	device := preamble
-	scancode := uint32(value & 0xFFFF)
-	if preamble != PREAMBLE {
+	preamble := value & 0xFFFF00000000
+	device := value & 0x0000FF000000 >> 24
+	subdevice := value & 0x000000FF0000 >> 16
+	scancode := value & 0x00000000FF00 >> 8
+	ck1 := value & 0x0000000000FF
+	ck2 := device ^ subdevice ^ scancode
+	if (preamble >> 32) != PREAMBLE {
+		// Bad preamble
+		return 0, 0, gopi.ErrBadParameter
+	} else if ck1 != ck2 {
+		// Bad checksum
 		return 0, 0, gopi.ErrBadParameter
 	} else {
-		return scancode, device, nil
+		// Merge device together with subdevice
+		return uint32(scancode), uint32(device<<8 | subdevice), nil
 	}
 }
 
