@@ -73,10 +73,10 @@ const (
 var (
 	HEADER_PULSE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE) // 9ms
 	HEADER_SPACE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 4500, TOLERANCE) // 4.5ms
-	BIT_PULSE         = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 650, TOLERANCE)  // 650ns
-	ONE_SPACE         = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1600, TOLERANCE) // 1.6ms
+	BIT_PULSE         = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)  // 650ns
+	ONE_SPACE         = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 1688, TOLERANCE) // 1.6ms
 	ZERO_SPACE        = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 562, TOLERANCE)
-	TRAIL_PULSE       = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 552, TOLERANCE)
+	TRAIL_PULSE       = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 562, TOLERANCE)
 	TRAIL_SPACE_17500 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 17500, TOLERANCE) // 17.5ms
 	TRAIL_SPACE_35000 = remotes.NewMarkSpace(gopi.LIRC_TYPE_SPACE, 35000, TOLERANCE) // 35ms
 	REPEAT_PULSE      = remotes.NewMarkSpace(gopi.LIRC_TYPE_PULSE, 9000, TOLERANCE)  // 9ms

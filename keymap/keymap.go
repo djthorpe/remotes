@@ -107,7 +107,10 @@ func (config Database) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.ext = config.ext()
 	this.keymap = make(map[remotes.CodecType]map[uint32]*tuple)
 
-	if this.root == "" || this.ext == "" {
+	if this.root == "" {
+		return nil, fmt.Errorf("Path not found: %v", config.Root)
+	}
+	if this.ext == "" {
 		log.Debug("keymap.db: Bad Parameter (root=%v ext=%v)", this.root, this.ext)
 		return nil, gopi.ErrBadParameter
 	}
@@ -129,6 +132,10 @@ func (this *db) Close() error {
 
 	// Return success
 	return nil
+}
+
+func (this *db) String() string {
+	return fmt.Sprintf("<keymap.db>{ root=%v empty=%v keymaps=%v }", this.root, this.empty, this.keymap)
 }
 
 func init() {
@@ -361,14 +368,18 @@ func (this *db) SetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 	}
 
 	// Set the codec in the keymap if CODEC_NONE
+	// We generally check the codec and device to make sure they are
+	// the same as the keymap values, but if the keymap has MultiCodec
+	// set then we allow a variety of codecs and devices for a single
+	// keymap
 	if keymap.Type == remotes.CODEC_NONE {
 		keymap.Type = codec
-	} else if keymap.Type != codec {
+	} else if keymap.Type != codec && keymap.MultiCodec == false {
 		return fmt.Errorf("Different codec (%v) than expected (%v)", codec, keymap.Type)
 	}
 	if keymap.Device == remotes.DEVICE_UNKNOWN {
 		keymap.Device = device
-	} else if keymap.Device != device {
+	} else if keymap.Device != device && keymap.MultiCodec == false {
 		return fmt.Errorf("Different device (0x%08X) than expected (0x%08X)", device, keymap.Device)
 	}
 
@@ -387,7 +398,7 @@ func (this *db) SetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 	}
 
 	// Obtain the tuple for this keymap - it needs to exist
-	if tuple := this.getTuple(codec, device); tuple == nil || tuple.keymap != keymap {
+	if tuple := this.getTuple(keymap.Type, keymap.Device); tuple == nil || tuple.keymap != keymap {
 		this.log.Debug("SetKeyMapEntry: Invalid keymap file")
 		return gopi.ErrBadParameter
 	} else {
@@ -408,17 +419,32 @@ func (this *db) SetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 			if entry.Name == "" {
 				entry.Name = defaultKeyName(entry.Keycode)
 			}
+			// Set codec & device overrides
+			if keymap.Type != codec {
+				entry.Type = codec
+			}
+			if keymap.Device != device {
+				entry.Device = device
+			}
 			// Return success
 			return nil
 		}
 	}
 
 	// Here we're adding a new entry
-	keymap.Map = append(keymap.Map, &remotes.KeyMapEntry{
+	new_entry := &remotes.KeyMapEntry{
 		Keycode:  keycode,
 		Scancode: scancode,
 		Name:     defaultKeyName(keycode),
-	})
+	}
+	// Set codec & device overrides
+	if keymap.Type != codec {
+		new_entry.Type = codec
+	}
+	if keymap.Device != device {
+		new_entry.Device = device
+	}
+	keymap.Map = append(keymap.Map, new_entry)
 
 	// Return success
 	return nil
@@ -517,6 +543,61 @@ func appendKeyMapEntry(array []*remotes.KeyMapEntry, entry *remotes.KeyMapEntry,
 		new_entry.Repeats = keymap.Repeats
 	}
 	return append(array, new_entry)
+}
+
+/////////////////////////////////////////////////////////////////////
+// SET PARAMETERS
+
+func (this *db) SetName(keymap *remotes.KeyMap, name string) error {
+	// TODO: Not yet implemented
+	return gopi.ErrNotImplemented
+}
+
+func (this *db) SetRepeats(keymap *remotes.KeyMap, repeats uint) error {
+	// Check parameters
+	if keymap == nil {
+		return gopi.ErrBadParameter
+	}
+
+	// The 'new' keymap case
+	if keymap == this.empty {
+		keymap.Repeats = repeats
+		return nil
+	}
+
+	// Get the tuple for the keymap and modify the repeats value
+	if tuple := this.getTuple(keymap.Type, keymap.Device); tuple == nil {
+		return gopi.ErrBadParameter
+	} else if tuple.keymap != keymap {
+		return gopi.ErrBadParameter
+	} else if tuple.keymap.Repeats == repeats {
+		return nil
+	} else {
+		tuple.keymap.Repeats = repeats
+		tuple.modified = true
+		return nil
+	}
+}
+
+func (this *db) SetMultiCodec(keymap *remotes.KeyMap, flag bool) error {
+	// Check parameters
+	if keymap == nil {
+		return gopi.ErrBadParameter
+	}
+
+	// Get the tuple for the keymap and modify the multicodec value
+	if tuple := this.getTuple(keymap.Type, keymap.Device); tuple == nil {
+		return gopi.ErrBadParameter
+	} else if tuple.keymap != keymap {
+		return gopi.ErrBadParameter
+	} else if tuple.keymap.MultiCodec == flag {
+		return nil
+	} else {
+		tuple.keymap.MultiCodec = flag
+		tuple.modified = true
+		return nil
+	}
+
 }
 
 /////////////////////////////////////////////////////////////////////

@@ -113,11 +113,22 @@ func (this *App) Save() error {
 
 // Keycodes returns the set of keys
 func (this *App) Keycodes() []*remotes.KeyMapEntry {
-	if keys, exists := this.app.AppFlags.GetString("key"); exists {
+	// Key codes are the arguments - join them together and then split them again!
+	if keys := strings.Join(this.app.AppFlags.Args(), ","); keys != "" {
 		return this.db.LookupKeyCode(strings.Split(keys, ",")...)
 	} else {
 		return this.db.LookupKeyCode()
 	}
+}
+
+// Set the default repeats value for a keymap
+func (this *App) SetRepeats(keymap *remotes.KeyMap, repeats uint) error {
+	return this.db.SetRepeats(keymap, repeats)
+}
+
+// Set the multicodec flag
+func (this *App) SetMultiCodec(keymap *remotes.KeyMap, flag bool) error {
+	return this.db.SetMultiCodec(keymap, flag)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,6 +151,20 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		done <- gopi.DONE
 		return gopi.ErrBadParameter
 	} else {
+		// Set the repeats value
+		if repeats, exists := app.AppFlags.GetUint("repeats"); exists {
+			if err := theApp.SetRepeats(keymap, repeats); err != nil {
+				done <- gopi.DONE
+				return err
+			}
+		}
+		// Set the multiple codec value
+		if multicodec, exists := app.AppFlags.GetBool("multicodec"); exists {
+			if err := theApp.SetMultiCodec(keymap, multicodec); err != nil {
+				done <- gopi.DONE
+				return err
+			}
+		}
 		// Iterate through Keycodes
 		keycodes := theApp.Keycodes()
 		for i, key := range keycodes {
@@ -226,7 +251,8 @@ func main() {
 	codecs := append(codecs(), "keymap")
 	config := gopi.NewAppConfig(codecs...)
 	config.AppFlags.FlagString("device", "", "Name of device to learn")
-	config.AppFlags.FlagString("key", "", "Comma-separated list of keys to learn")
+	config.AppFlags.FlagUint("repeats", 0, "Key send repeat value")
+	config.AppFlags.FlagBool("multicodec", false, "Remote sends various encodings")
 
 	// Set the start signal
 	startSignal = make(chan struct{})

@@ -38,12 +38,13 @@ type KeyMapEntry struct {
 
 // KeyMap maps one or more keys and scancodes
 type KeyMap struct {
-	XMLName xml.Name       `xml:"remote"`
-	Type    CodecType      `xml:"codec"`
-	Device  uint32         `xml:"id,attr,omitempty"`
-	Name    string         `xml:"name"`
-	Repeats uint           `xml:"repeats"`
-	Map     []*KeyMapEntry `xml:"keymap"`
+	XMLName    xml.Name       `xml:"remote"`
+	Type       CodecType      `xml:"codec"`
+	Device     uint32         `xml:"id,attr,omitempty"`
+	Name       string         `xml:"name"`
+	Repeats    uint           `xml:"repeats"`
+	MultiCodec bool           `xml:"multicodec,omitempty"` // Flag to indicate the device may record from multiple codecs
+	Map        []*KeyMapEntry `xml:"keymap"`
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -117,6 +118,11 @@ type KeyMaps interface {
 	// each KeyMapEntry or nil. Returns all keycodes on empty
 	// searchterm array
 	LookupKeyCode(searchterm ...string) []*KeyMapEntry
+
+	// Set various parameters
+	SetName(*KeyMap, string) error
+	SetMultiCodec(*KeyMap, bool) error
+	SetRepeats(*KeyMap, uint) error
 
 	// Set, get and lookup KeyMapEntry mapping
 	SetKeyMapEntry(keymap *KeyMap, codec CodecType, device uint32, keycode RemoteCode, scancode uint32) error

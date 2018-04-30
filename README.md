@@ -71,9 +71,7 @@ level is [here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-in
 
 ## Software Installation
 
-You'll need a working Go Language environment to compile and install the software. There 
-are a few dependencies, for example gRPC and Protocol Buffers, if you're wanting to use the
-microservice:
+You'll need a working Go Language environment to compile and install the software:
 
 ```
 bash% go get github.com/djthorpe/remotes
@@ -185,11 +183,16 @@ and send codes to your device:
 
 ```
 bash% ir_send
-KEY                  CODE                      CODEC             DEVICE     SCANCODE   REPEATS
--------------------- ------------------------- ----------------- ---------- ---------- -------
+NAME                 CODEC                DEVICE     KEYS    REPEATS
+-------------------- -------------------- ---------- ------- -------
 appletv              CODEC_APPLETV        0x0000009F       6       0
-squeezebox           CODEC_NEC32          0x00000076      27       0
-dvd                  CODEC_PANASONIC      0x40040D00      26       0
+KR21                 CODEC_NEC32          0x000000FF      39       0
+Squeezebox           CODEC_NEC32          0x00007689      31       0
+Rotel                CODEC_NEC32          0x0000C188      15       3
+Panasonic DVD        CODEC_PANASONIC      0x00000D00      32       0
+Sony TV              CODEC_SONY12         0x00000010      28       3
+Sony VCR             CODEC_SONY12         0x0000001A      26       3
+
 
 bash% ir_send -device dvd
 KEY                  CODE                      CODEC             DEVICE     SCANCODE   REPEATS
@@ -206,9 +209,19 @@ Sleep                KEYCODE_SLEEP             CODEC_PANASONIC   0x40040D00 0x00
 ```
 
 If you invoke `ir_send` without any arguments, it will display a list of learnt devices. If you invoke
-it with a `-device` flag it should display a list of learnt keys. Finally you can invoke it with one
-or more arguments to send an IR command. If you have some ambigious key names, then you'll need to
-modify what you use on the command line to specify a key more exactly. For example,
+it with a `-device` flag it should display a list of learnt keys. If you also include a `-repeats`
+flag with a value, it will modify the default number of times a code is transmitted. For example:
+
+```
+bash% ir_send -device appletv -repeats 3
+NAME                 CODEC                DEVICE     KEYS    REPEATS
+-------------------- -------------------- ---------- ------- -------
+appletv              CODEC_APPLETV        0x0000009F       6       3
+```
+
+Finally you can invoke it with one or more arguments to send an IR command. 
+If you have some ambigious key names, then you'll need to modify what you use on the command line 
+to specify a key more exactly. For example,
 
 ```
 bash% ir_send -device "appletv" volume
@@ -217,12 +230,10 @@ Ambiguous key: volume (It could mean one of 'Volume Down','Volume Up')
 bash% ir_send -device "appletv" volume_down
 KEY                  CODE                      CODEC             DEVICE     SCANCODE   REPEATS
 -------------------- ------------------------- ----------------- ---------- ---------- -------
-Volume Down          KEYCODE_VOLUME_DOWN       CODEC_APPLETV     0x0000009F 0x000000B0       0
+Volume Down          KEYCODE_VOLUME_DOWN       CODEC_APPLETV     0x0000009F 0x000000B0       3
 ```
 
-There are some enhancements for the command-line utilities such as being able to send a command
-more than once (the "Repeats") and cleaning up the database, all of which can be done by editing
-the XML files under `/var/local/remotes` if you want to do it manually.
+To clean up the database, you can edit the XML files under `/var/local/remotes`.
 
 ## Running Microservices
 

@@ -269,18 +269,28 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 	if bits, err := bitsForCodec(this.codec_type, device, scancode); err != nil {
 		return err
 	} else {
-		pulses = append(pulses, HEADER_PULSE.Value)
+		for j := uint(0); j < (repeats + 1); j++ {
+			length := HEADER_PULSE.Value
+			pulses = append(pulses, HEADER_PULSE.Value)
 
-		// Send the bits
-		for i := 0; i < len(bits); i++ {
-			pulses = append(pulses, ONEZERO_SPACE.Value)
-			if bits[i] {
-				pulses = append(pulses, ONE_PULSE.Value)
-			} else {
-				pulses = append(pulses, ZERO_PULSE.Value)
+			// Send the bits
+			for i := 0; i < len(bits); i++ {
+				pulses = append(pulses, ONEZERO_SPACE.Value)
+				length += ONEZERO_SPACE.Value
+				if bits[i] {
+					pulses = append(pulses, ONE_PULSE.Value)
+					length += ONEZERO_SPACE.Value
+				} else {
+					pulses = append(pulses, ZERO_PULSE.Value)
+					length += ZERO_PULSE.Value
+				}
+			}
+
+			// If repeats then send trail
+			if repeats > 0 && j < repeats {
+				pulses = append(pulses, TX_DURATION-length)
 			}
 		}
-		// TODO: Deal with repeats
 	}
 
 	// Perform the sending

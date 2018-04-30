@@ -105,7 +105,9 @@ func Send(device string, keymaps remotes.KeyMaps, args []string, repeats uint, r
 
 	// For each argument, return the set of keys and then match those keys
 	// to a single entry or else the argument is ambiguous
-	for _, arg := range args {
+	allkeys := strings.Split(strings.Join(args, ","), ",")
+	fmt.Println(allkeys)
+	for _, arg := range allkeys {
 		entries := make([]*remotes.KeyMapEntry, 0, 1)
 		for _, key := range keymaps.LookupKeyCode(arg) {
 			entries = append(entries, keymaps.GetKeyMapEntry(allkeymaps[0], remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, key.Keycode, remotes.SCANCODE_UNKNOWN)...)
@@ -132,6 +134,16 @@ func Send(device string, keymaps remotes.KeyMaps, args []string, repeats uint, r
 
 	// Return success
 	return nil
+}
+
+func SetRepeats(device string, keymaps remotes.KeyMaps, repeats uint) error {
+	// Get keymap for device
+	allkeymaps := keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, device)
+	if len(allkeymaps) != 1 {
+		return fmt.Errorf("Invalid -device flag")
+	}
+	// Set the parameter
+	return keymaps.SetRepeats(allkeymaps[0], repeats)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,6 +179,7 @@ FOR_LOOP:
 }
 
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
+
 	// Load keymaps
 	keymaps := app.ModuleInstance("keymap").(remotes.KeyMaps)
 	if err := keymaps.LoadKeyMaps(func(filename string, keymap *remotes.KeyMap) {
@@ -179,8 +192,8 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 	// Repeats override
 	repeats, repeats_override := app.AppFlags.GetUint("repeats")
 
-	// Device
 	if device, exists := app.AppFlags.GetString("device"); exists == false {
+		// No -device flag so display devices
 		if err := DisplayKeymaps(keymaps, app); err != nil {
 			done <- gopi.DONE
 			return err
@@ -191,14 +204,31 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 			done <- gopi.DONE
 			return err
 		}
-	} else if err := DisplayDeviceEntries(device, keymaps, app); err != nil {
-		done <- gopi.DONE
-		return err
+	} else {
+		if repeats_override {
+			// Set repeats value
+			if err := SetRepeats(device, keymaps, repeats); err != nil {
+				done <- gopi.DONE
+				return err
+			}
+		}
+		if err := DisplayDeviceEntries(device, keymaps, app); err != nil {
+			done <- gopi.DONE
+			return err
+		}
 	}
 
 	// Wait for interrupt
 	app.Logger.Info("Waiting for CTRL+C or SIGTERM to end")
 	app.WaitForSignalOrTimeout(500 * time.Millisecond)
+
+	// Save
+	if err := keymaps.SaveModifiedKeyMaps(func(filename string, keymap *remotes.KeyMap) {
+		app.Logger.Info("Saving '%v' to file %v", keymap.Name, filename)
+	}); err != nil {
+		done <- gopi.DONE
+		return err
+	}
 
 	// Finish gracefully
 	done <- gopi.DONE
