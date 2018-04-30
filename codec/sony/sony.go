@@ -260,52 +260,31 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
-	return gopi.ErrNotImplemented
-	/*
-		this.log.Debug("<remotes.Codec.Sony.Send>{ type=%v value=%X repeats=%v }", this.codec_type, value, repeats)
+	this.log.Debug2("<remotes.Codec.Sony.SendSend{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
 
-		// Check to make sure the scancode value is less than
-		// or equal to the length and repeats is at least one
-		mask := uint32(1<<this.bit_length) - 1
-		if value&mask != value || repeats == 0 {
-			return gopi.ErrBadParameter
-		}
+	// Array of pulses
+	pulses := make([]uint32, 0, 100)
 
-		// Create a container for mark/space
-		pulses := make([]uint32, 0)
+	// Make bits and pulses
+	if bits, err := bitsForCodec(this.codec_type, device, scancode); err != nil {
+		return err
+	} else {
 		pulses = append(pulses, HEADER_PULSE.Value)
 
-		for r := uint(0); r < repeats; r++ {
-			mask := uint32(1) << (this.bit_length - 1)
-			pulses = append(pulses, HEADER_SPACE.Value)
-			for i := uint(0); i < this.bit_length; i++ {
-				if value&mask != 0 {
-					pulses = append(pulses, ONE_PULSE.Value)
-				} else {
-					pulses = append(pulses, ZERO_PULSE.Value)
-				}
-				pulses = append(pulses, ONEZERO_SPACE.Value)
-				mask = mask >> 1
-			}
-			pulses = append(pulses, TRAIL_PULSE.Value)
-			if r+1 < repeats {
-				pulses = append(pulses, REPEAT_SPACE.Value, HEADER_PULSE.Value)
+		// Send the bits
+		for i := 0; i < len(bits); i++ {
+			pulses = append(pulses, ONEZERO_SPACE.Value)
+			if bits[i] {
+				pulses = append(pulses, ONE_PULSE.Value)
+			} else {
+				pulses = append(pulses, ZERO_PULSE.Value)
 			}
 		}
+		// TODO: Deal with repeats
+	}
 
-		// Debug
-		if this.log.IsDebug() {
-			for i, value := range pulses {
-				if i%2 == 0 {
-					fmt.Println(" mark", value)
-				} else {
-					fmt.Println("space", value)
-				}
-			}
-		}
-
-		// Perform the sending
-		return this.lirc.PulseSend(pulses)*/
+	// Perform the sending
+	return this.lirc.PulseSend(pulses)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -333,12 +312,41 @@ func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error)
 		// 15 bit codes are similar, with 7 command bits and 8 device bits
 		return (value & 0x7F00) >> 8, (value & 0xFF), nil
 	case remotes.CODEC_SONY20:
-		// 20 bit codes have 7 command bits, 5 device bits, and 8 extended device bits,
-		// assume this is like the 12-bit code, discarding the extended bits for the moment
-		return (value & 0xFE000) >> 13, (value & 0x1F00) >> 8, nil
+		// 20 bit codes have 7 command bits and 13 device bits
+		return (value & 0xFE000) >> 13, (value & 0x1FFF), nil
 	default:
 		return 0, 0, gopi.ErrBadParameter
 	}
+}
+
+func bitsForCodec(codec remotes.CodecType, device uint32, scancode uint32) ([]bool, error) {
+	bits := make([]bool, 0, bitLengthForCodec(codec))
+	switch codec {
+	case remotes.CODEC_SONY12:
+		// 7 scancode bits and 5 device bits
+		bits = bitsAppend(bits, scancode, 7)
+		bits = bitsAppend(bits, device, 5)
+	case remotes.CODEC_SONY15:
+		// 7 scancode bits and 8 device bits
+		bits = bitsAppend(bits, scancode, 7)
+		bits = bitsAppend(bits, device, 8)
+	case remotes.CODEC_SONY20:
+		// 7 scancode bits and 13 device bits
+		bits = bitsAppend(bits, scancode, 7)
+		bits = bitsAppend(bits, device, 13)
+	default:
+		return nil, gopi.ErrBadParameter
+	}
+	return bits, nil
+}
+
+func bitsAppend(array []bool, value uint32, length uint) []bool {
+	mask := uint32(1) << (length - 1)
+	for i := uint(0); i < length; i++ {
+		array = append(array, value&mask != 0)
+		mask >>= 1
+	}
+	return array
 }
 
 func (s state) String() string {
