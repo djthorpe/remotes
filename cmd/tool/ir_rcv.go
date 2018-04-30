@@ -28,6 +28,7 @@ import (
 	// Remotes
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
+	_ "github.com/djthorpe/remotes/codec/rc5"
 	_ "github.com/djthorpe/remotes/codec/sony"
 )
 

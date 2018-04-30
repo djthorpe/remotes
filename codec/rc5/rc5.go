@@ -40,8 +40,9 @@ type codec struct {
 	events      <-chan gopi.Event
 	subscribers *evt.PubSub
 	state       state
-	value       uint64
+	bits        []bool
 	length      uint
+	repeat      bool
 }
 
 type state uint32
@@ -51,12 +52,13 @@ type state uint32
 
 const (
 	// state
-	STATE_EXPECT_PULSE state = iota
+	STATE_EXPECT_FIRST_PULSE state = iota
+	STATE_EXPECT_PULSE
 	STATE_EXPECT_SPACE
 )
 
 const (
-	TOLERANCE = 25 // 25% tolerance on values
+	TOLERANCE = 35 // 35% tolerance on values
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -96,11 +98,12 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.events = this.lirc.Subscribe()
 	this.subscribers = evt.NewPubSub(0)
 
-	// Set bit length as 14 bits
+	// Set bit length to 14 bits
 	this.bit_length = 14
+	this.codec_type = remotes.CODEC_RC5
 
 	// Reset
-	this.Reset()
+	this.Reset(false)
 
 	// Create background routine
 	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
@@ -149,10 +152,11 @@ func (this *codec) Type() remotes.CodecType {
 	return this.codec_type
 }
 
-func (this *codec) Reset() {
-	this.state = STATE_EXPECT_PULSE
-	this.value = 0
+func (this *codec) Reset(repeat bool) {
+	this.state = STATE_EXPECT_FIRST_PULSE
+	this.bits = make([]bool, 0, this.bit_length*2)
 	this.length = 0
+	this.repeat = repeat
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -196,59 +200,73 @@ FOR_LOOP:
 }
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug("<remotes.Codec.RC5.Receive>{ type=%v state=%v evt=%v }", this.codec_type, this.state, evt)
+	this.log.Debug2("<remotes.Codec.RC5.Receive>{ type=%v state=%v evt=%v }", this.codec_type, this.state, evt)
+	fmt.Println(this.state, evt)
 	switch this.state {
-	case STATE_EXPECT_PULSE:
+	case STATE_EXPECT_FIRST_PULSE:
 		if LONG_PULSE.Matches(evt) {
-			this.eject(1, 2)
+			this.eject(false, true, true)
 			this.state = STATE_EXPECT_SPACE
 		} else if SHORT_PULSE.Matches(evt) {
-			this.value = (this.value | 0x1) << 1
-			this.length = this.length + 1
+			this.eject(false, true)
 			this.state = STATE_EXPECT_SPACE
-			this.eject(false)
 		} else {
-			this.Reset()
+			this.Reset(false)
+		}
+	case STATE_EXPECT_PULSE:
+		if LONG_PULSE.Matches(evt) {
+			this.eject(true, true)
+			this.state = STATE_EXPECT_SPACE
+		} else if SHORT_PULSE.Matches(evt) {
+			this.eject(true)
+			this.state = STATE_EXPECT_SPACE
+		} else {
+			this.Reset(false)
 		}
 	case STATE_EXPECT_SPACE:
 		if LONG_SPACE.Matches(evt) {
-			this.value = this.value << 2
-			this.length = this.length + 2
+			this.eject(false, false)
 			this.state = STATE_EXPECT_PULSE
-			this.eject(false)
 		} else if SHORT_SPACE.Matches(evt) {
-			this.value = this.value << 1
-			this.length = this.length + 1
-			this.state = STATE_EXPECT_PULSE
 			this.eject(false)
+			this.state = STATE_EXPECT_PULSE
 		} else if REPEAT_SPACE.Matches(evt) {
-			this.eject(true)
-			this.Reset()
+			this.Reset(true)
 		} else {
-			this.Reset()
+			this.Reset(false)
 		}
 	default:
-		this.Reset()
+		this.Reset(false)
 	}
 }
 
-func (this *codec) eject(repeat bool) {
-	// Make even
-	if this.length%2 != 0 {
-		this.length += 1
-	}
-	fmt.Printf("binary=%v length=%v repeat=%v\n", strconv.FormatUint(this.value, 2), this.length, repeat)
-	value := this.value
-	for i := uint(0); i < this.length; i += 2 {
-		fmt.Printf("value=%v\n", value&0x3)
-		value >>= 2
+func (this *codec) eject(bits ...bool) {
+	this.bits = append(this.bits, bits...)
+	this.length += uint(len(bits))
+
+	if uint(len(this.bits)) == this.bit_length*2 {
+		value := uint32(0)
+		for i, j := uint(0), uint(0); i < this.bit_length; i, j = i+1, j+2 {
+			value <<= 1
+			if this.bits[j] == this.bits[j+1] {
+				// Invalid Manchester Code
+				return
+			} else if this.bits[j] {
+				// 10 => 0
+				value |= 0
+			} else {
+				// 01 => 1
+				value |= 1
+			}
+		}
+		this.Emit(value, this.repeat)
 	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // SENDING
 
-func (this *codec) Send(value uint32, repeats uint) error {
+func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 	return gopi.ErrNotImplemented
 }
 
@@ -256,5 +274,29 @@ func (this *codec) Send(value uint32, repeats uint) error {
 // PRIVATE METHODS
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
-	return 0, 0, gopi.ErrBadParameter
+	switch codec {
+	case remotes.CODEC_RC5:
+		// scancode is lowest 6 bits (0x03F), device is next 5 bits (7C0)
+		scancode := value & 0x003F
+		device := value & 0x07C0 >> 6
+		header := value & 0x3800 >> 11
+		fmt.Printf("value=%v header=%v scancode=%X device=%X\n", strconv.FormatUint(uint64(value), 2), strconv.FormatUint(uint64(header), 2), scancode, device)
+		// TODO: Check header
+		return scancode, device, nil
+	default:
+		return 0, 0, gopi.ErrNotImplemented
+	}
+}
+
+func (s state) String() string {
+	switch s {
+	case STATE_EXPECT_FIRST_PULSE:
+		return "STATE_EXPECT_FIRST_PULSE"
+	case STATE_EXPECT_PULSE:
+		return "STATE_EXPECT_PULSE"
+	case STATE_EXPECT_SPACE:
+		return "STATE_EXPECT_SPACE"
+	default:
+		return "[?? Invalid state]"
+	}
 }
