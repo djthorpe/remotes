@@ -43,6 +43,11 @@ type db struct {
 	// Keymap database
 	keymap map[remotes.CodecType]map[uint32]*tuple
 
+	// Keyentry indexes
+	bycodec    map[remotes.CodecType][]*etuple
+	bydevice   map[uint32][]*etuple
+	byscancode map[uint32][]*etuple
+
 	// New keymap
 	empty *remotes.KeyMap
 }
@@ -111,15 +116,20 @@ func (config Database) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.log = log
 	this.root = config.root()
 	this.ext = config.ext()
-	this.keymap = make(map[remotes.CodecType]map[uint32]*tuple)
 
 	if this.root == "" {
+		log.Debug("keymap: Bad Parameter (root=%v ext=%v)", this.root, this.ext)
 		return nil, fmt.Errorf("Path not found: %v", config.Root)
 	}
 	if this.ext == "" {
-		log.Debug("keymap.db: Bad Parameter (root=%v ext=%v)", this.root, this.ext)
+		log.Debug("keymap: Bad Parameter (root=%v ext=%v)", this.root, this.ext)
 		return nil, gopi.ErrBadParameter
 	}
+
+	this.keymap = make(map[remotes.CodecType]map[uint32]*tuple)
+	this.bycodec = make(map[remotes.CodecType][]*etuple)
+	this.bydevice = make(map[uint32][]*etuple)
+	this.byscancode = make(map[uint32][]*etuple)
 
 	return this, nil
 }
@@ -134,6 +144,9 @@ func (this *db) Close() error {
 
 	// Release resources
 	this.keymap = nil
+	this.bycodec = nil
+	this.bydevice = nil
+	this.byscancode = nil
 	this.empty = nil
 
 	// Return success
@@ -438,19 +451,16 @@ func (this *db) SetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 	}
 
 	// Here we're adding a new entry
-	new_entry := &remotes.KeyMapEntry{
+	keymap.Map = appendKeyMapEntry(nil, keymap, &remotes.KeyMapEntry{
 		Keycode:  keycode,
 		Scancode: scancode,
-		Name:     defaultKeyName(keycode),
+		Name:     "",
+	})
+
+	// Reindex the keymap
+	if err := this.indexKeyMap(keymap); err != nil {
+		return err
 	}
-	// Set codec & device overrides
-	if keymap.Type != codec {
-		new_entry.Type = codec
-	}
-	if keymap.Device != device {
-		new_entry.Device = device
-	}
-	keymap.Map = append(keymap.Map, new_entry)
 
 	// Return success
 	return nil
@@ -491,7 +501,7 @@ func (this *db) GetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 			}
 		}
 		// Or else we want to populate the entry
-		entries = appendKeyMapEntry(entries, entry, keymap)
+		entries = appendKeyMapEntry(entries, keymap, entry)
 	}
 	if len(entries) == 0 {
 		return nil
@@ -500,30 +510,25 @@ func (this *db) GetKeyMapEntry(keymap *remotes.KeyMap, codec remotes.CodecType, 
 	}
 }
 
-func (this *db) LookupKeyMapEntry(codec remotes.CodecType, device uint32, scancode uint32) []*remotes.KeyMapEntry {
+func (this *db) LookupKeyMapEntry(codec remotes.CodecType, device uint32, scancode uint32) map[*remotes.KeyMapEntry]*remotes.KeyMap {
 	this.log.Debug2("<keymap.db>LookupKeyMapEntry{ codec=%v device=0x%08X scancode=0x%08X }", codec, device, scancode)
 
-	// Iterate through the keymaps to find the keymapentry
-	if keymaps := this.KeyMaps(codec, device, ""); len(keymaps) == 0 {
+	if tuples := this.lookupEntryTuples(codec, device, scancode); len(tuples) == 0 {
 		return nil
 	} else {
-		entries := make([]*remotes.KeyMapEntry, 0, 1)
-		for _, keymap := range keymaps {
-			for _, entry := range keymap.Map {
-				// Scancode search
-				if scancode != remotes.SCANCODE_UNKNOWN && scancode != entry.Scancode {
-					continue
-				}
-				// Append a new entry with additional details populated
-				entries = appendKeyMapEntry(entries, entry, keymap)
-			}
+		// Create entries from tuples
+		entries := make(map[*remotes.KeyMapEntry]*remotes.KeyMap, len(tuples))
+		for _, tuple := range tuples {
+			entry := newKeyMapEntry(tuple.keymap, tuple.entry, false)
+			entries[entry] = tuple.keymap
 		}
-		if len(entries) == 0 {
-			return nil
-		} else {
-			return entries
-		}
+		return entries
 	}
+}
+
+func (this *db) DeleteKeyMapEntry(keymap *remotes.KeyMap, entry *remotes.KeyMapEntry) error {
+	this.log.Info("TODO: Delete %v from %v", entry, keymap.Name)
+	return nil
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -583,7 +588,7 @@ func (this *db) SetMultiCodec(keymap *remotes.KeyMap, flag bool) error {
 /////////////////////////////////////////////////////////////////////
 // PRIVATE METHODS
 
-func appendKeyMapEntry(array []*remotes.KeyMapEntry, entry *remotes.KeyMapEntry, keymap *remotes.KeyMap) []*remotes.KeyMapEntry {
+func newKeyMapEntry(keymap *remotes.KeyMap, entry *remotes.KeyMapEntry, minimized bool) *remotes.KeyMapEntry {
 	new_entry := &remotes.KeyMapEntry{
 		Scancode: entry.Scancode,
 		Keycode:  entry.Keycode,
@@ -592,20 +597,43 @@ func appendKeyMapEntry(array []*remotes.KeyMapEntry, entry *remotes.KeyMapEntry,
 		Type:     entry.Type,
 		Repeats:  entry.Repeats,
 	}
-	// Override some values if they are empty
+
+	// Set the name field if empty
 	if new_entry.Name == "" {
 		new_entry.Name = defaultKeyName(entry.Keycode)
 	}
-	if new_entry.Device == 0 || new_entry.Device == remotes.DEVICE_UNKNOWN {
-		new_entry.Device = keymap.Device
+
+	// Minimized means that it removes details from the entry that are
+	// already mentioned in the keymap
+	if minimized {
+		if keymap.Type == entry.Type {
+			new_entry.Type = remotes.CODEC_NONE
+		}
+		if keymap.Device == entry.Device {
+			new_entry.Device = 0
+		}
+		if keymap.Repeats == entry.Repeats {
+			new_entry.Repeats = 0
+		}
+	} else {
+		if new_entry.Type == remotes.CODEC_NONE {
+			new_entry.Type = keymap.Type
+		}
+		if new_entry.Device == 0 || new_entry.Device == remotes.DEVICE_UNKNOWN {
+			new_entry.Device = keymap.Device
+		}
+		if new_entry.Repeats == 0 {
+			new_entry.Repeats = keymap.Repeats
+		}
 	}
-	if new_entry.Type == remotes.CODEC_NONE {
-		new_entry.Type = keymap.Type
+	return new_entry
+}
+
+func appendKeyMapEntry(array []*remotes.KeyMapEntry, keymap *remotes.KeyMap, entry *remotes.KeyMapEntry) []*remotes.KeyMapEntry {
+	if array == nil {
+		array = keymap.Map
 	}
-	if new_entry.Repeats == 0 {
-		new_entry.Repeats = keymap.Repeats
-	}
-	return append(array, new_entry)
+	return append(array, newKeyMapEntry(keymap, entry, array == nil))
 }
 
 func (this *db) registerNewKeyMap(path string, keymap *remotes.KeyMap, modified bool) error {
@@ -660,10 +688,126 @@ func (this *db) indexKeyMap(keymap *remotes.KeyMap) error {
 	if keymap == nil || len(keymap.Map) == 0 {
 		return gopi.ErrBadParameter
 	}
-	// TODO
-	//fmt.Println("TODO: Index", keymap.Name)
+
+	// Iterate through the keymap entries
+	for _, entry := range keymap.Map {
+		if err := this.indexKeyMapEntry(keymap, entry); err != nil {
+			return err
+		}
+	}
+
 	// Return success
 	return nil
+}
+
+func (this *db) indexKeyMapEntry(keymap *remotes.KeyMap, entry *remotes.KeyMapEntry) error {
+
+	// Remove any existing entries from all indexes
+	for codec, entries := range this.bycodec {
+		for _, etuple := range entries {
+			if entry == etuple.entry {
+				this.log.Warn("TODO: removeindexKeyMapEntry codec %v => %v", codec, entry)
+			}
+		}
+	}
+	for device, entries := range this.bydevice {
+		for _, etuple := range entries {
+			if entry == etuple.entry {
+				this.log.Warn("TODO: removeindexKeyMapEntry device %08X => %v", device, entry)
+			}
+		}
+	}
+	for scancode, entries := range this.byscancode {
+		for _, etuple := range entries {
+			if entry == etuple.entry {
+				this.log.Warn("TODO: removeindexKeyMapEntry scancode %08X => %v", scancode, entry)
+			}
+		}
+	}
+
+	// Set index parameters
+	codec := entry.Type
+	device := entry.Device
+	scancode := entry.Scancode
+	etuple_ptr := &etuple{entry: entry, keymap: keymap}
+	if codec == remotes.CODEC_NONE {
+		codec = keymap.Type
+	}
+	if device == 0 || device == remotes.DEVICE_UNKNOWN {
+		device = keymap.Device
+	}
+
+	// Make the arrays
+	if _, exists := this.bycodec[codec]; exists == false {
+		this.bycodec[codec] = make([]*etuple, 0, 1)
+	}
+	if _, exists := this.bydevice[device]; exists == false {
+		this.bydevice[device] = make([]*etuple, 0, 1)
+	}
+	if _, exists := this.byscancode[scancode]; exists == false {
+		this.byscancode[scancode] = make([]*etuple, 0, 1)
+	}
+
+	// Index
+	this.bycodec[codec] = append(this.bycodec[codec], etuple_ptr)
+	this.bydevice[device] = append(this.bydevice[device], etuple_ptr)
+	this.byscancode[scancode] = append(this.byscancode[scancode], etuple_ptr)
+
+	// Return success
+	return nil
+}
+
+func (this *db) lookupEntryTuples(codec remotes.CodecType, device uint32, scancode uint32) []*etuple {
+	// Create an etuple hash to count the number of occurences
+	counter := make(map[*etuple]uint, 100)
+	term := uint(0)
+	increment := func(tuples []*etuple) {
+		for _, tuple := range tuples {
+			if _, exists := counter[tuple]; exists {
+				counter[tuple] += 1
+			} else {
+				counter[tuple] = 1
+			}
+		}
+		term += 1
+	}
+	// Scancode search first
+	if scancode != remotes.SCANCODE_UNKNOWN {
+		if tuples, exists := this.byscancode[scancode]; exists == false {
+			return nil
+		} else {
+			increment(tuples)
+		}
+	}
+	// Device second
+	if device != remotes.DEVICE_UNKNOWN {
+		if tuples, exists := this.bydevice[device]; exists == false {
+			return nil
+		} else {
+			increment(tuples)
+		}
+	}
+	// Codec third
+	if codec != remotes.CODEC_NONE {
+		if tuples, exists := this.bycodec[codec]; exists == false {
+			return nil
+		} else {
+			increment(tuples)
+		}
+	}
+	// Return nil if no terms
+	if term == 0 {
+		return nil
+	}
+	// Check for matching all search criteria
+	tuples := make([]*etuple, 0, 1)
+	for tuple, t := range counter {
+		if t == term {
+			tuples = append(tuples, tuple)
+		}
+	}
+	// Return tuples
+	return tuples
 }
 
 func (this *db) getTuple(codec remotes.CodecType, device uint32) *tuple {

@@ -29,6 +29,7 @@ import (
 	// Remotes
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
+	_ "github.com/djthorpe/remotes/codec/rc5"
 	_ "github.com/djthorpe/remotes/codec/sony"
 )
 
@@ -69,8 +70,8 @@ func DisplayKeymaps(keymaps remotes.KeyMaps, app *gopi.AppInstance) error {
 	return err
 }
 
-func DisplayEntry(entry *remotes.KeyMapEntry) {
-	fmt.Printf("%-20s %-25s %-17v 0x%08X 0x%08X %7d\n", entry.Name, entry.Keycode, entry.Type, entry.Device, entry.Scancode, entry.Repeats)
+func DisplayEntry(entry *remotes.KeyMapEntry, prefix string) {
+	fmt.Printf("%-20s %-25s %-17v 0x%08X 0x%08X %7d\n", prefix+entry.Name, entry.Keycode, entry.Type, entry.Device, entry.Scancode, entry.Repeats)
 }
 
 func DisplayDeviceEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppInstance) error {
@@ -81,7 +82,7 @@ func DisplayDeviceEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppI
 	for _, keymap := range keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, device) {
 		for _, entry := range keymaps.LookupKeyMapEntry(keymap.Type, keymap.Device, remotes.SCANCODE_UNKNOWN) {
 			once.Do(DisplayEntryHeader)
-			DisplayEntry(entry)
+			DisplayEntry(entry, "")
 		}
 	}
 
@@ -92,6 +93,40 @@ func DisplayDeviceEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppI
 
 	// Return
 	return err
+}
+
+func Delete(device string, keymaps remotes.KeyMaps, args []string) error {
+	var once sync.Once
+
+	// Get keymap for device
+	allkeymaps := keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, device)
+	if len(allkeymaps) != 1 {
+		return fmt.Errorf("Invalid -device flag")
+	}
+	allkeys := strings.Split(strings.Join(args, ","), ",")
+	for _, arg := range allkeys {
+		entries := make([]*remotes.KeyMapEntry, 0, 1)
+		for _, key := range keymaps.LookupKeyCode(arg) {
+			entries = append(entries, keymaps.GetKeyMapEntry(allkeymaps[0], remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, key.Keycode, remotes.SCANCODE_UNKNOWN)...)
+		}
+		if len(entries) == 0 {
+			return fmt.Errorf("Unknown key: %v", arg)
+		} else if len(entries) > 1 {
+			ambigious := ""
+			for _, entry := range entries {
+				ambigious += fmt.Sprint("'" + entry.Name + "',")
+			}
+			return fmt.Errorf("Ambiguous key: %v (It could mean one of %v)", arg, strings.TrimSuffix(ambigious, ","))
+		} else {
+			// Perform the delete
+			once.Do(DisplayEntryHeader)
+			DisplayEntry(entries[0], "Deleted ")
+			if err := keymaps.DeleteKeyMapEntry(allkeymaps[0], entries[0]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func Send(device string, keymaps remotes.KeyMaps, args []string, repeats uint, repeats_override bool) error {
@@ -126,7 +161,7 @@ func Send(device string, keymaps remotes.KeyMaps, args []string, repeats uint, r
 			}
 			// Perform the send
 			once.Do(DisplayEntryHeader)
-			DisplayEntry(entries[0])
+			DisplayEntry(entries[0], "Sent ")
 			send <- entries[0]
 		}
 	}
@@ -198,8 +233,13 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 			return err
 		}
 	} else if args := app.AppFlags.Args(); len(args) > 0 {
-		// Send keycodes
-		if err := Send(device, keymaps, args, repeats, repeats_override); err != nil {
+		if delete, _ := app.AppFlags.GetBool("delete"); delete {
+			// Delete keymappings
+			if err := Delete(device, keymaps, args); err != nil {
+				done <- gopi.DONE
+				return err
+			}
+		} else if err := Send(device, keymaps, args, repeats, repeats_override); err != nil {
 			done <- gopi.DONE
 			return err
 		}
@@ -254,6 +294,7 @@ func main() {
 	config := gopi.NewAppConfig(codecs...)
 	config.AppFlags.FlagString("device", "", "Name of device to send codes to")
 	config.AppFlags.FlagUint("repeats", 0, "Number of code repeats (overrides default)")
+	config.AppFlags.FlagBool("delete", false, "Delete key mapping(s)")
 
 	// Make the send channel
 	send = make(chan *remotes.KeyMapEntry)

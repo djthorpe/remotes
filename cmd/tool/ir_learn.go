@@ -26,6 +26,7 @@ import (
 	// Remotes
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
+	_ "github.com/djthorpe/remotes/codec/rc5"
 	_ "github.com/djthorpe/remotes/codec/sony"
 )
 
@@ -151,6 +152,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		done <- gopi.DONE
 		return gopi.ErrBadParameter
 	} else {
+
 		// Set the repeats value
 		if repeats, exists := app.AppFlags.GetUint("repeats"); exists {
 			if err := theApp.SetRepeats(keymap, repeats); err != nil {
@@ -158,6 +160,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 				return err
 			}
 		}
+
 		// Set the multiple codec value
 		if multicodec, exists := app.AppFlags.GetBool("multicodec"); exists {
 			if err := theApp.SetMultiCodec(keymap, multicodec); err != nil {
@@ -165,6 +168,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 				return err
 			}
 		}
+
 		// Iterate through Keycodes
 		keycodes := theApp.Keycodes()
 		for i, key := range keycodes {

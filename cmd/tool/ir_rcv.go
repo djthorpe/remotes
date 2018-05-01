@@ -40,16 +40,16 @@ var (
 ////////////////////////////////////////////////////////////////////////////////
 
 func PrintHeader() {
-	fmt.Printf("%-20s %-25v %-10s %-10s %-15s %-22s %s\n", "Name", "Key", "Scancode", "Device", "Codec", "Event", "Timestamp")
-	fmt.Printf("%-20s %-25v %-10s %-10s %-15s %-22s %s\n",
-		strings.Repeat("-", 20), strings.Repeat("-", 25), strings.Repeat("-", 10), strings.Repeat("-", 10),
+	fmt.Printf("%-31s %-25v %-10s %-10s %-15s %-22s %s\n", "Name", "Key", "Scancode", "Device", "Codec", "Event", "Timestamp")
+	fmt.Printf("%-31s %-25v %-10s %-10s %-15s %-22s %s\n",
+		strings.Repeat("-", 31), strings.Repeat("-", 25), strings.Repeat("-", 10), strings.Repeat("-", 10),
 		strings.Repeat("-", 15), strings.Repeat("-", 22), strings.Repeat("-", 10))
 }
 
-func PrintEntry(entry *remotes.KeyMapEntry, evt_type gopi.InputEventType, ts time.Duration) {
+func PrintEntry(keymap *remotes.KeyMap, entry *remotes.KeyMapEntry, evt_type gopi.InputEventType, ts time.Duration) {
 	once.Do(PrintHeader)
 	ts = ts.Truncate(time.Millisecond)
-	fmt.Printf("%-20s %-25v 0x%08X 0x%08X %-15s %-22s %v\n", entry.Name, entry.Keycode, entry.Scancode, entry.Device, entry.Type, evt_type, ts)
+	fmt.Printf("%+15s: %-15s %-25v 0x%08X 0x%08X %-15s %-22s %v\n", keymap.Name, entry.Name, entry.Keycode, entry.Scancode, entry.Device, entry.Type, evt_type, ts)
 }
 
 func PrintEvent(evt *remotes.RemoteEvent) {
@@ -63,8 +63,8 @@ func PrintEvent(evt *remotes.RemoteEvent) {
 func HandleEvent(keymaps remotes.KeyMaps, evt *remotes.RemoteEvent) error {
 	// Lookup entry
 	if entries := keymaps.LookupKeyMapEntry(evt.Codec(), evt.Device(), evt.Scancode()); entries != nil {
-		for _, entry := range entries {
-			PrintEntry(entry, evt.EventType(), evt.Timestamp())
+		for entry, keymap := range entries {
+			PrintEntry(keymap, entry, evt.EventType(), evt.Timestamp())
 		}
 	} else {
 		PrintEvent(evt)
