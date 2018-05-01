@@ -131,6 +131,13 @@ type KeyMaps interface {
 	DeleteKeyMapEntry(keymap *KeyMap, entry *KeyMapEntry) error
 }
 
+type RemoteEvent interface {
+	gopi.InputEvent
+
+	// Return type of codec for decoded transmission
+	Codec() CodecType
+}
+
 /////////////////////////////////////////////////////////////////////
 // ERROR CODES
 

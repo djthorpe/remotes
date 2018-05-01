@@ -52,22 +52,14 @@ func PrintEntry(keymap *remotes.KeyMap, entry *remotes.KeyMapEntry, evt_type gop
 	fmt.Printf("%+15s: %-15s %-25v 0x%08X 0x%08X %-15s %-22s %v\n", keymap.Name, entry.Name, entry.Keycode, entry.Scancode, entry.Device, entry.Type, evt_type, ts)
 }
 
-func PrintEvent(evt *remotes.RemoteEvent) {
-	once.Do(PrintHeader)
-	ts := evt.Timestamp().Truncate(time.Millisecond)
-	fmt.Printf("%-20s %-25v 0x%08X 0x%08X %-15s %-22s %v\n", "<unmapped>", "<unmapped>", evt.Scancode(), evt.Device(), evt.Codec(), evt.EventType(), ts)
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
-func HandleEvent(keymaps remotes.KeyMaps, evt *remotes.RemoteEvent) error {
+func HandleEvent(keymaps remotes.KeyMaps, evt remotes.RemoteEvent) error {
 	// Lookup entry
 	if entries := keymaps.LookupKeyMapEntry(evt.Codec(), evt.Device(), evt.Scancode()); entries != nil {
 		for entry, keymap := range entries {
 			PrintEntry(keymap, entry, evt.EventType(), evt.Timestamp())
 		}
-	} else {
-		PrintEvent(evt)
 	}
 	return nil
 }
@@ -102,7 +94,7 @@ FOR_LOOP:
 		case <-done:
 			break FOR_LOOP
 		case remote_event := <-remote_events:
-			if err := HandleEvent(keymaps, remote_event.(*remotes.RemoteEvent)); err != nil {
+			if err := HandleEvent(keymaps, remote_event.(remotes.RemoteEvent)); err != nil {
 				app.Logger.Warn("EventLoop: %v", err)
 			}
 		}

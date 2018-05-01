@@ -21,6 +21,15 @@ service Remotes {
 	// Return all possible keys with one or more search terms
 	rpc LookupKeys (LookupKeysRequest) returns (KeysReply);
 
+	// Send a remote scancode
+	rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
+	
+	// Send a remote keycode
+	rpc SendKeycode (SendKeycodeRequest) returns (EmptyReply);
+
+    // Receive remote events
+    rpc Receive (EmptyRequest) returns (stream ReceiveReply);
+
 	// Return a new empty keymap
 	//rpc CreateKeymap (CreateKeymapRequest) returns (KeymapsReply);
 
@@ -33,14 +42,6 @@ service Remotes {
 	// Set Keymap key
 	//rpc SetKeymapKey (SetKeymapKeyRequest) returns (EmptyReply);
 
-	// Send a remote scancode
-	rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
-	
-	// Send a keycode
-	//rpc SendKeycode (SendKeycodeRequest) returns (EmptyReply);
-
-    // Receive remote events
-    rpc Receive (EmptyRequest) returns (stream ReceiveReply);
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -111,29 +112,57 @@ message InputEvent {
     google.protobuf.Duration ts = 1;
     InputDeviceType device_type = 2;
     InputEventType event_type = 3;
+    uint32 device = 7;
+	uint32 keycode = 6;
     uint32 scancode = 5;
-    uint32 device = 6;
-    Point position = 7;
-    Point relative = 8;
-    uint32 slot = 9;
+    Point position = 8;
+    Point relative = 9;
+    uint32 slot = 10;
+}
+
+/////////////////////////////////////////////////////////////////////
+// KEY MAP & KEY
+
+message KeyMapInfo {
+	string name = 1;
+	CodecType codec = 2;
+	uint32 device = 3;
+	uint32 repeats = 4;	
+	uint32 keys = 5; // Number of learnt keys
+}
+
+message Key {
+	string name = 1;
+	string keycode = 2;
+	CodecType codec = 3;
+	uint32 device = 4;
+	uint32 scancode = 5;
+	uint32 repeats = 6;		
 }
 
 /////////////////////////////////////////////////////////////////////
 // RECEIVE REPLY
 
 message ReceiveReply {
-  InputEvent event = 1;
-  CodecType codec = 2;
+	InputEvent event = 1;
+	Key key = 2;
+	KeyMapInfo keymap = 3;
 }
 
 /////////////////////////////////////////////////////////////////////
-// SEND SCANCODE REQUEST
+// SEND SCANCODE / KEYCODE REQUEST
 
 message SendScancodeRequest {
-  CodecType codec = 1;
-  uint32 device = 2;
-  uint32 scancode = 3;
-  uint32 repeats = 4;
+	CodecType codec = 1;
+	uint32 device = 2;
+	uint32 scancode = 3;
+	uint32 repeats = 4;
+}
+
+message SendKeycodeRequest {
+	string keymap = 1;
+	string keycode = 2;
+	uint32 repeats = 3;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -147,30 +176,14 @@ message CodecsReply {
 // KEYMAPS REPLY
 
 message KeyMapsReply {
-	message KeyMapInfo {
-		string name = 1;
-		CodecType codec = 2;
-		uint32 device = 3;
-		uint32 repeats = 4;	
-		uint32 keys = 5; // Number of learnt keys
-    }
 	repeated KeyMapInfo keymap = 1;
 }
 
 /////////////////////////////////////////////////////////////////////
 // LOOKUP ALL KEYS FOR A KEYMAP
 
-message Key {
-	string name = 1;
-	string keycode = 2;
-	CodecType codec = 3;
-	uint32 device = 4;
-	uint32 scancode = 5;
-	uint32 repeats = 6;		
-}
-
 message KeysRequest {
-	string name = 1;
+	string keymap = 1;
 }
 
 message LookupKeysRequest {

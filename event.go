@@ -22,9 +22,9 @@ import (
 )
 
 /////////////////////////////////////////////////////////////////////
-// gopi.InputEvent implementation
+// RemoteEvent Implementation
 
-type RemoteEvent struct {
+type remoteevent struct {
 	source   Codec
 	ts       time.Duration
 	device   uint32
@@ -32,8 +32,8 @@ type RemoteEvent struct {
 	repeat   bool
 }
 
-func NewRemoteEvent(source Codec, ts time.Duration, scancode, device uint32, repeat bool) *RemoteEvent {
-	return &RemoteEvent{
+func NewRemoteEvent(source Codec, ts time.Duration, scancode, device uint32, repeat bool) RemoteEvent {
+	return &remoteevent{
 		source:   source,
 		ts:       ts,
 		scancode: scancode,
@@ -42,23 +42,23 @@ func NewRemoteEvent(source Codec, ts time.Duration, scancode, device uint32, rep
 	}
 }
 
-func (this *RemoteEvent) Source() gopi.Driver {
+func (this *remoteevent) Source() gopi.Driver {
 	return this.source
 }
 
-func (this *RemoteEvent) Name() string {
+func (this *remoteevent) Name() string {
 	return "RemoteEvent"
 }
 
-func (this *RemoteEvent) Timestamp() time.Duration {
+func (this *remoteevent) Timestamp() time.Duration {
 	return this.ts
 }
 
-func (*RemoteEvent) DeviceType() gopi.InputDeviceType {
+func (*remoteevent) DeviceType() gopi.InputDeviceType {
 	return gopi.INPUT_TYPE_REMOTE
 }
 
-func (this *RemoteEvent) EventType() gopi.InputEventType {
+func (this *remoteevent) EventType() gopi.InputEventType {
 	if this.repeat {
 		return gopi.INPUT_EVENT_KEYREPEAT
 	} else {
@@ -66,34 +66,34 @@ func (this *RemoteEvent) EventType() gopi.InputEventType {
 	}
 }
 
-func (this *RemoteEvent) Codec() CodecType {
+func (this *remoteevent) Codec() CodecType {
 	return this.source.Type()
 }
 
-func (this *RemoteEvent) Scancode() uint32 {
+func (this *remoteevent) Scancode() uint32 {
 	return this.scancode
 }
 
-func (this *RemoteEvent) Device() uint32 {
+func (this *remoteevent) Device() uint32 {
 	return this.device
 }
 
-func (*RemoteEvent) Position() gopi.Point {
+func (*remoteevent) Position() gopi.Point {
 	return gopi.ZeroPoint
 }
 
-func (*RemoteEvent) Relative() gopi.Point {
+func (*remoteevent) Relative() gopi.Point {
 	return gopi.ZeroPoint
 }
 
-func (*RemoteEvent) Keycode() gopi.KeyCode {
+func (*remoteevent) Keycode() gopi.KeyCode {
 	return gopi.KEYCODE_NONE
 }
 
-func (*RemoteEvent) Slot() uint {
+func (*remoteevent) Slot() uint {
 	return 0
 }
 
-func (this *RemoteEvent) String() string {
+func (this *remoteevent) String() string {
 	return fmt.Sprintf("remotes.RemoteEvent{ scancode=0x%X device=0x%X repeat=%v codec=%v ts=%v source=%v }", this.scancode, this.device, this.repeat, this.Codec(), this.ts, this.source)
 }

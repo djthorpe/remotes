@@ -80,7 +80,7 @@ func DisplayDeviceEntries(device string, keymaps remotes.KeyMaps, app *gopi.AppI
 
 	// Output all entries from device
 	for _, keymap := range keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, device) {
-		for _, entry := range keymaps.LookupKeyMapEntry(keymap.Type, keymap.Device, remotes.SCANCODE_UNKNOWN) {
+		for entry, _ := range keymaps.LookupKeyMapEntry(keymap.Type, keymap.Device, remotes.SCANCODE_UNKNOWN) {
 			once.Do(DisplayEntryHeader)
 			DisplayEntry(entry, "")
 		}

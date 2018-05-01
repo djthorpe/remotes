@@ -78,7 +78,7 @@ func (this *App) SetKey(keymap *remotes.KeyMap, key *remotes.KeyMapEntry) {
 	this.key = key
 }
 
-func (this *App) HandleEvent(evt *remotes.RemoteEvent) error {
+func (this *App) HandleEvent(evt remotes.RemoteEvent) error {
 	if this.keymap == nil && this.key == nil && evt == nil {
 		return nil
 	} else if err := this.db.SetKeyMapEntry(this.keymap, evt.Codec(), evt.Device(), this.key.Keycode, evt.Scancode()); err != nil {
@@ -225,7 +225,7 @@ FOR_LOOP:
 		case <-done:
 			break FOR_LOOP
 		case remote_event := <-remote_events:
-			if err := theApp.HandleEvent(remote_event.(*remotes.RemoteEvent)); err != nil {
+			if err := theApp.HandleEvent(remote_event.(remotes.RemoteEvent)); err != nil {
 				app.Logger.Warn("EventLoop: %v", err)
 			}
 		}

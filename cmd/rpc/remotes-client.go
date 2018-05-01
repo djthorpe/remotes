@@ -127,7 +127,7 @@ func PrintEvent(once *sync.Once, reply *pb.ReceiveReply) {
 		fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------")
 	})
 	duration, _ := ptype.Duration(reply.Event.Ts)
-	fmt.Printf("%-20s %-25s 0x%08X 0x%08X %-10s\n", reply.Codec, reply.Event.EventType, reply.Event.Device, reply.Event.Scancode, duration)
+	fmt.Printf("%-20s %-25s 0x%08X 0x%08X %-10s\n", reply.Key, reply.Event.EventType, reply.Event.Device, reply.Event.Scancode, duration)
 }
 
 func PrintCodecs(reply *pb.CodecsReply) {
@@ -272,7 +272,7 @@ func Keys(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{})
 			return nil
 		}
 	} else {
-		if reply, err := service.Keys(ctx, &pb.KeysRequest{Name: keymap}); err != nil {
+		if reply, err := service.Keys(ctx, &pb.KeysRequest{Keymap: keymap}); err != nil {
 			return err
 		} else {
 			PrintKeys(reply)
@@ -290,6 +290,11 @@ func Send(app *gopi.AppInstance, service pb.RemotesClient, done <-chan struct{})
 		<-done
 		cancel()
 	}()
+
+	// Send can be:
+	//   -keymap "AppleTV" -repeats <n> send <key>
+	// or
+	//   -codec <codec> -repeats <n> send <device> <scancode>
 
 	/* Get command line arguments */
 	if codec, exists := app.AppFlags.GetString("codec"); exists == false {

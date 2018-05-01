@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
@@ -142,13 +143,30 @@ FOR_LOOP:
 	for {
 		select {
 		case evt := <-input_events:
-			if reply := toProtobufRemotesReply(evt.(gopi.InputEvent)); reply == nil {
-				this.log.Warn("Receive: unable to form a reply from input event, ignoring")
-			} else if err := stream.Send(reply); err != nil {
-				this.log.Warn("Receive: error sending: %v: closing request", err)
-				break FOR_LOOP
+			if remote_evt, ok := evt.(remotes.RemoteEvent); remote_evt != nil && ok {
+				// Look up key presses - there may be more than one for each key press
+				entries := this.keymaps.LookupKeyMapEntry(remote_evt.Codec(), remote_evt.Device(), remote_evt.Scancode())
+				if len(entries) > 0 {
+					// Mapped to one or more keys
+					for entry, keymap := range entries {
+						if reply := toProtobufReceiveReply(remote_evt, keymap, entry); reply == nil {
+							this.log.Warn("Receive: unable to form a reply from input event, ignoring")
+						} else if err := stream.Send(reply); err != nil {
+							this.log.Warn("Receive: error sending: %v: closing request", err)
+							break FOR_LOOP
+						}
+					}
+				} else {
+					// Unmapped to any key
+					if reply := toProtobufReceiveReply(remote_evt, nil, nil); reply == nil {
+						this.log.Warn("Receive: unable to form a reply from input event, ignoring")
+					} else if err := stream.Send(reply); err != nil {
+						this.log.Warn("Receive: error sending: %v: closing request", err)
+						break FOR_LOOP
+					}
+				}
 			} else {
-				this.log.Debug2("Receive: sent %v", reply)
+				this.log.Warn("Receive: invalid remotes.RemoteEvent, ignoring: %v", evt)
 			}
 		case <-cancel_requests:
 			break FOR_LOOP
@@ -175,6 +193,56 @@ func (this *service) SendScancode(ctx context.Context, in *pb.SendScancodeReques
 	}
 }
 
+func (this *service) SendKeycode(ctx context.Context, in *pb.SendKeycodeRequest) (*pb.EmptyReply, error) {
+
+	if keymaps := this.keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, in.Keymap); len(keymaps) != 1 {
+		// Keymap not found
+		this.log.Warn("SendKeycode: Bad request: Invalid keymap (%v)", in.Keymap)
+		return nil, gopi.ErrBadParameter
+	} else if allkeyentries := this.keymaps.LookupKeyCode(in.Keycode); len(allkeyentries) == 0 {
+		// Keycode not found
+		this.log.Warn("SendKeycode: Bad request: Invalid keycode (%v)", in.Keycode)
+		return nil, gopi.ErrBadParameter
+	} else {
+		// Lookup entries in the keymap with this keycode
+		entries := make([]*remotes.KeyMapEntry, 0, 1)
+		for _, keyentry := range allkeyentries {
+			entries = append(entries, this.keymaps.GetKeyMapEntry(keymaps[0], remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, keyentry.Keycode, remotes.SCANCODE_UNKNOWN)...)
+		}
+		if len(entries) == 0 {
+			// No key entry found
+			this.log.Warn("SendKeycode: Bad request: Keycode not found (%v)", in.Keycode)
+			return nil, remotes.ErrNotFound
+		}
+		if len(entries) > 1 {
+			// There are more than one key for that name
+			ambigious := ""
+			for _, entry := range entries {
+				ambigious += fmt.Sprint("'" + entry.Name + "',")
+			}
+			return nil, fmt.Errorf("Ambiguous: '%v' (It could mean one of %v)", in.Keycode, strings.TrimSuffix(ambigious, ","))
+		}
+		if codec, exists := this.codecs[entries[0].Type]; exists == false {
+			this.log.Warn("SendKeycode: Bad request: Invalid codec (%v)", entries[0].Type)
+			return nil, gopi.ErrBadParameter
+		} else {
+			// If there is a repeats parameter, then use that to override
+			repeats := uint(in.Repeats)
+			if repeats == 0 {
+				repeats = entries[0].Repeats
+			}
+			// Perform the sending
+			if err := codec.Send(entries[0].Device, entries[0].Scancode, repeats); err != nil {
+				return nil, err
+			}
+
+		}
+	}
+
+	// Success
+	return &pb.EmptyReply{}, nil
+}
+
 func (this *service) Codecs(ctx context.Context, in *pb.EmptyRequest) (*pb.CodecsReply, error) {
 	return toProtobufCodecsReply(this.codecs), nil
 }
@@ -185,9 +253,9 @@ func (this *service) KeyMaps(ctx context.Context, in *pb.EmptyRequest) (*pb.KeyM
 
 func (this *service) Keys(ctx context.Context, in *pb.KeysRequest) (*pb.KeysReply, error) {
 	// Obtain the keymap
-	if in.Name == "" {
+	if in.Keymap == "" {
 		return nil, gopi.ErrBadParameter
-	} else if keymaps := this.keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, in.Name); len(keymaps) == 0 {
+	} else if keymaps := this.keymaps.KeyMaps(remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, in.Keymap); len(keymaps) == 0 {
 		return nil, remotes.ErrNotFound
 	} else if len(keymaps) > 1 {
 		return nil, remotes.ErrAmbiguous
@@ -240,42 +308,26 @@ func toProtobufCodecsReply(codecs map[remotes.CodecType]remotes.Codec) *pb.Codec
 func toProtobufKeyMapsReply(keymaps []*remotes.KeyMap) *pb.KeyMapsReply {
 	// Create the reply
 	reply := &pb.KeyMapsReply{
-		Keymap: make([]*pb.KeyMapsReply_KeyMapInfo, 0, len(keymaps)),
+		Keymap: make([]*pb.KeyMapInfo, 0, len(keymaps)),
 	}
 	// Populate the reply
 	for _, keymap := range keymaps {
-		reply.Keymap = append(reply.Keymap, toProtobufKeyMapsReplyInfo(keymap))
+		reply.Keymap = append(reply.Keymap, toProtobufKeyMapInfo(keymap))
 	}
 	// Return the reply
 	return reply
 }
 
-func toProtobufKeyMapsReplyInfo(keymap *remotes.KeyMap) *pb.KeyMapsReply_KeyMapInfo {
-	reply := &pb.KeyMapsReply_KeyMapInfo{
-		Name:    keymap.Name,
-		Codec:   pb.CodecType(keymap.Type),
-		Device:  keymap.Device,
-		Repeats: uint32(keymap.Repeats),
-		Keys:    uint32(len(keymap.Map)),
-	}
-	return reply
-}
-
-func toProtobufRemotesReply(evt gopi.InputEvent) *pb.ReceiveReply {
-	if codec, ok := evt.Source().(remotes.Codec); ok && codec != nil {
-		return &pb.ReceiveReply{
-			Event: toProtobufInputEvent(evt),
-			Codec: pb.CodecType(codec.Type()),
-		}
-	} else {
-		return &pb.ReceiveReply{
-			Event: toProtobufInputEvent(evt),
-		}
+func toProtobufReceiveReply(evt remotes.RemoteEvent, keymap *remotes.KeyMap, entry *remotes.KeyMapEntry) *pb.ReceiveReply {
+	return &pb.ReceiveReply{
+		Event:  toProtobufInputEvent(evt, entry),
+		Key:    toProtobufKey(evt, entry),
+		Keymap: toProtobufKeyMapInfo(keymap),
 	}
 }
 
-func toProtobufInputEvent(evt gopi.InputEvent) *pb.InputEvent {
-	return &pb.InputEvent{
+func toProtobufInputEvent(evt gopi.InputEvent, entry *remotes.KeyMapEntry) *pb.InputEvent {
+	input_event := &pb.InputEvent{
 		Ts:         ptype.DurationProto(evt.Timestamp()),
 		DeviceType: pb.InputDeviceType(evt.DeviceType()),
 		EventType:  pb.InputEventType(evt.EventType()),
@@ -284,6 +336,43 @@ func toProtobufInputEvent(evt gopi.InputEvent) *pb.InputEvent {
 		Position:   toProtobufPoint(evt.Position()),
 		Relative:   toProtobufPoint(evt.Relative()),
 		Slot:       uint32(evt.Slot()),
+	}
+	if entry != nil {
+		input_event.Keycode = uint32(entry.Keycode)
+	}
+	return input_event
+}
+
+func toProtobufKey(evt remotes.RemoteEvent, entry *remotes.KeyMapEntry) *pb.Key {
+	if entry == nil {
+		return &pb.Key{
+			Codec:    pb.CodecType(evt.Codec()),
+			Device:   evt.Device(),
+			Scancode: evt.Scancode(),
+		}
+	} else {
+		return &pb.Key{
+			Name:     entry.Name,
+			Keycode:  fmt.Sprint(entry.Keycode),
+			Codec:    pb.CodecType(entry.Type),
+			Device:   entry.Device,
+			Scancode: entry.Scancode,
+			Repeats:  uint32(entry.Repeats),
+		}
+	}
+}
+
+func toProtobufKeyMapInfo(keymap *remotes.KeyMap) *pb.KeyMapInfo {
+	if keymap == nil {
+		return nil
+	} else {
+		return &pb.KeyMapInfo{
+			Name:    keymap.Name,
+			Codec:   pb.CodecType(keymap.Type),
+			Device:  keymap.Device,
+			Repeats: uint32(keymap.Repeats),
+			Keys:    uint32(len(keymap.Map)),
+		}
 	}
 }
 
