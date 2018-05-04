@@ -1,6 +1,6 @@
 
 syntax = "proto3";
-package mutablelogic;
+package remotes;
 option go_package = "remotes";
 
 import "google/protobuf/duration.proto";
@@ -9,6 +9,8 @@ import "google/protobuf/duration.proto";
 // SERVICES
 
 service Remotes {
+	/* READ OPERATIONS */
+
     // Return array of codecs supported
     rpc Codecs (EmptyRequest) returns (CodecsReply);
 
@@ -21,14 +23,16 @@ service Remotes {
 	// Return all possible keys with one or more search terms
 	rpc LookupKeys (LookupKeysRequest) returns (KeysReply);
 
+    // Receive remote events
+    rpc Receive (EmptyRequest) returns (stream ReceiveReply);
+
 	// Send a remote scancode
 	rpc SendScancode (SendScancodeRequest) returns (EmptyReply);
 	
 	// Send a remote keycode
 	rpc SendKeycode (SendKeycodeRequest) returns (EmptyReply);
 
-    // Receive remote events
-    rpc Receive (EmptyRequest) returns (stream ReceiveReply);
+	/* WRITE OPERATIONS */
 
 	// Return a new empty keymap
 	//rpc CreateKeymap (CreateKeymapRequest) returns (KeymapsReply);

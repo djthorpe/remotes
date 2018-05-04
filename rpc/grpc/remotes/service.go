@@ -7,21 +7,21 @@
 	For Licensing and Usage information, please see LICENSE.md
 */
 
-package service
+package remotes
 
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
+	"github.com/djthorpe/gopi/sys/rpc/grpc"
 	evt "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
 
 	// Protocol Buffer definitions
-	pb "github.com/djthorpe/remotes/protobuf/remotes"
+	pb "github.com/djthorpe/remotes/rpc/protobuf/remotes"
 	ptype "github.com/golang/protobuf/ptypes"
 )
 
@@ -55,8 +55,8 @@ func (config Service) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.merger = evt.NewEventMerger()
 	this.keymaps = config.KeyMaps
 
-	// Register service with server
-	config.Server.Register(this)
+	// Register service with GRPC server
+	pb.RegisterRemotesServer(config.Server.(grpc.GRPCServer).GRPCServer(), this)
 
 	// Success
 	return this, nil
@@ -121,12 +121,6 @@ func (this *service) CancelRequests() error {
 
 	// Return success
 	return nil
-}
-
-func (this *service) GRPCHook() reflect.Value {
-	// ensure we conform to pb.RemotesServer
-	var _ pb.RemotesServer = &service{}
-	return reflect.ValueOf(pb.RegisterRemotesServer)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -7,7 +7,7 @@
 	For Licensing and Usage information, please see LICENSE.md
 */
 
-package service
+package remotes
 
 import (
 	"strings"
@@ -21,9 +21,9 @@ import (
 // INIT
 
 func init() {
-	// Register service/remotes:grpc
+	// Register rpc/service/remotes:grpc
 	gopi.RegisterModule(gopi.Module{
-		Name:     "service/remotes:grpc",
+		Name:     "rpc/service/remotes:grpc",
 		Type:     gopi.MODULE_TYPE_SERVICE,
 		Requires: []string{"rpc/server", "keymap"},
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
@@ -48,6 +48,22 @@ func init() {
 			}
 			// Success
 			return nil
+		},
+	})
+
+	// Register rpc/client/remotes:grpc
+	gopi.RegisterModule(gopi.Module{
+		Name:     "rpc/client/remotes:grpc",
+		Type:     gopi.MODULE_TYPE_CLIENT,
+		Requires: []string{"rpc/clientpool"},
+		Run: func(app *gopi.AppInstance, _ gopi.Driver) error {
+			clientpool := app.ModuleInstance("rpc/clientpool").(gopi.RPCClientPool)
+			if clientpool == nil {
+				return gopi.ErrAppError
+			} else {
+				clientpool.RegisterClient("remotes.Remotes", NewClient)
+				return nil
+			}
 		},
 	})
 }

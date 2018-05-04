@@ -24,11 +24,13 @@ import (
 	_ "github.com/djthorpe/remotes/keymap"
 
 	// RPC Services
-	_ "github.com/djthorpe/remotes/cmd/rpc/service"
+	_ "github.com/djthorpe/gopi/rpc/grpc/metrics"
+	_ "github.com/djthorpe/remotes/rpc/grpc/remotes"
 
 	// Remote Codecs
 	_ "github.com/djthorpe/remotes/codec/nec"
 	_ "github.com/djthorpe/remotes/codec/panasonic"
+	_ "github.com/djthorpe/remotes/codec/rc5"
 	_ "github.com/djthorpe/remotes/codec/sony"
 )
 
@@ -47,7 +49,7 @@ func codecs() []string {
 
 func main() {
 	// Create the configuration
-	modules := append(codecs(), "service/remotes:grpc", "keymap")
+	modules := append(codecs(), "rpc/service/remotes:grpc", "rpc/service/metrics:grpc", "keymap")
 	config := gopi.NewAppConfig(modules...)
 
 	// Set the RPCServiceRecord for server discovery

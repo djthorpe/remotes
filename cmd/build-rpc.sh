@@ -43,8 +43,8 @@ COMMANDS=(
   rpc/remotes-client.go
 )
 
-echo "go generate github.com/djthorpe/remotes/protobuf"
-go generate -x github.com/djthorpe/remotes/protobuf || exit 1
+echo "go generate github.com/djthorpe/remotes/rpc/protobuf"
+go generate -x github.com/djthorpe/remotes/rpc/protobuf || exit 1
 for COMMAND in ${COMMANDS[@]}; do
   echo "go install cmd/${COMMAND}"
   go install -ldflags "${LDFLAGS}" "cmd/${COMMAND}" || exit -1
