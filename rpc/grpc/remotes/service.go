@@ -193,16 +193,9 @@ func (this *service) SendKeycode(ctx context.Context, in *pb.SendKeycodeRequest)
 		// Keymap not found
 		this.log.Warn("SendKeycode: Bad request: Invalid keymap (%v)", in.Keymap)
 		return nil, gopi.ErrBadParameter
-	} else if allkeyentries := this.keymaps.LookupKeyCode(in.Keycode); len(allkeyentries) == 0 {
-		// Keycode not found
-		this.log.Warn("SendKeycode: Bad request: Invalid keycode (%v)", in.Keycode)
-		return nil, gopi.ErrBadParameter
 	} else {
 		// Lookup entries in the keymap with this keycode
-		entries := make([]*remotes.KeyMapEntry, 0, 1)
-		for _, keyentry := range allkeyentries {
-			entries = append(entries, this.keymaps.GetKeyMapEntry(keymaps[0], remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, keyentry.Keycode, remotes.SCANCODE_UNKNOWN)...)
-		}
+		entries := this.keymaps.GetKeyMapEntry(keymaps[0], remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN, remotes.RemoteCode(in.Keycode), remotes.SCANCODE_UNKNOWN)
 		if len(entries) == 0 {
 			// No key entry found
 			this.log.Warn("SendKeycode: Bad request: Keycode not found (%v)", in.Keycode)
@@ -279,7 +272,7 @@ func toProtobufKeysReply(entries []*remotes.KeyMapEntry) *pb.KeysReply {
 	for i, entry := range entries {
 		reply.Key[i] = &pb.Key{
 			Name:     entry.Name,
-			Keycode:  fmt.Sprint(entry.Keycode),
+			Keycode:  pb.RemoteCode(entry.Keycode),
 			Scancode: entry.Scancode,
 			Device:   entry.Device,
 			Codec:    pb.CodecType(entry.Type),
@@ -332,7 +325,7 @@ func toProtobufInputEvent(evt gopi.InputEvent, entry *remotes.KeyMapEntry) *pb.I
 		Slot:       uint32(evt.Slot()),
 	}
 	if entry != nil {
-		input_event.Keycode = uint32(entry.Keycode)
+		input_event.Keycode = pb.RemoteCode(entry.Keycode)
 	}
 	return input_event
 }
@@ -347,7 +340,7 @@ func toProtobufKey(evt remotes.RemoteEvent, entry *remotes.KeyMapEntry) *pb.Key 
 	} else {
 		return &pb.Key{
 			Name:     entry.Name,
-			Keycode:  fmt.Sprint(entry.Keycode),
+			Keycode:  pb.RemoteCode(entry.Keycode),
 			Codec:    pb.CodecType(entry.Type),
 			Device:   entry.Device,
 			Scancode: entry.Scancode,

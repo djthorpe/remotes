@@ -74,19 +74,27 @@ func fmtCodec(codec remotes.CodecType) string {
 	}
 }
 
+func fmtKey(key client.Key) string {
+	return fmt.Sprintf("%v [%v]", key.Name, key.Keycode)
+}
+
+func fmtKeycode(keycode remotes.RemoteCode) string {
+	return fmt.Sprintf("%d", keycode)
+}
+
 func fmtTimestamp(ts time.Duration) string {
 	ts = ts.Truncate(time.Millisecond)
 	return fmt.Sprint(ts)
 }
 
 func receivePrintHeader() {
-	fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "Key", "Event", "Keymap", "Scancode", "Timestamp")
-	fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------")
+	fmt.Printf("%-30s %-25s %-10s %-10s %-10s\n", "Key", "Event", "Keymap", "Scancode", "Timestamp")
+	fmt.Printf("%-30s %-25s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------")
 }
 
 func receivePrintEvent(event *client.Event) {
 	PrintHeaderOnce.Do(receivePrintHeader)
-	fmt.Printf("%-20s %-25s %-10s %-10s %-10s\n", event.Key.Name, event.InputEvent.EventType, event.KeyMapInfo.Name, fmtScancode(event.Key.Scancode), fmtTimestamp(event.InputEvent.Timestamp))
+	fmt.Printf("%-30s %-25s %-10s %-10s %-10s\n", fmtKey(event.Key), event.InputEvent.EventType, event.KeyMapInfo.Name, fmtScancode(event.Key.Scancode), fmtTimestamp(event.InputEvent.Timestamp))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,11 +142,11 @@ func Keys(app *gopi.AppInstance, client *client.Client) error {
 		return err
 	} else {
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Key", "Code", "Device", "Scancode", "Codec", "Repeats"})
+		table.SetHeader([]string{"Key", "Keycode", "Device", "Scancode", "Codec", "Repeats"})
 		for _, key := range keys {
 			table.Append([]string{
 				key.Name,
-				"",
+				fmt.Sprint(key.Keycode),
 				fmtDevice(key.Device),
 				fmtScancode(key.Scancode),
 				fmtCodec(key.Type),
@@ -178,11 +186,11 @@ func LookupKeys(app *gopi.AppInstance, client *client.Client) error {
 		return err
 	} else {
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Key", "Code", "Device", "Scancode", "Codec", "Repeats"})
+		table.SetHeader([]string{"Key", "Keycode", "Device", "Scancode", "Codec", "Repeats"})
 		for _, key := range keys {
 			table.Append([]string{
 				key.Name,
-				"",
+				fmt.Sprint(key.Keycode),
 				fmtDevice(key.Device),
 				fmtScancode(key.Scancode),
 				fmtCodec(key.Type),

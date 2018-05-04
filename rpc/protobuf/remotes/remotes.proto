@@ -101,6 +101,10 @@ enum CodecType {
 	CODEC_PANASONIC = 19;
 }
 
+enum RemoteCode {
+	KEYCODE_NONE = 0;
+}
+
 /////////////////////////////////////////////////////////////////////
 // GEOMETRY
 
@@ -117,7 +121,7 @@ message InputEvent {
     InputDeviceType device_type = 2;
     InputEventType event_type = 3;
     uint32 device = 7;
-	uint32 keycode = 6;
+	RemoteCode keycode = 6;
     uint32 scancode = 5;
     Point position = 8;
     Point relative = 9;
@@ -137,7 +141,7 @@ message KeyMapInfo {
 
 message Key {
 	string name = 1;
-	string keycode = 2;
+	RemoteCode keycode = 2;
 	CodecType codec = 3;
 	uint32 device = 4;
 	uint32 scancode = 5;
@@ -165,7 +169,7 @@ message SendScancodeRequest {
 
 message SendKeycodeRequest {
 	string keymap = 1;
-	string keycode = 2;
+	RemoteCode keycode = 2;
 	uint32 repeats = 3;
 }
 

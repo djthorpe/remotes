@@ -46,7 +46,7 @@ type InputEvent struct {
 	Timestamp  time.Duration
 	DeviceType gopi.InputDeviceType
 	EventType  gopi.InputEventType
-	Keycode    uint32
+	Keycode    remotes.RemoteCode
 }
 
 type Event struct {
@@ -138,6 +138,7 @@ func (this *Client) Keys(keymap string) ([]*Key, error) {
 			remotes.KeyMapEntry{
 				Name:     key.Name,
 				Type:     remotes.CodecType(key.Codec),
+				Keycode:  remotes.RemoteCode(key.Keycode),
 				Device:   key.Device,
 				Scancode: key.Scancode,
 				Repeats:  uint(key.Repeats),
@@ -166,7 +167,7 @@ func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
 						Timestamp:  ts,
 						DeviceType: gopi.InputDeviceType(msg.Event.DeviceType),
 						EventType:  gopi.InputEventType(msg.Event.EventType),
-						Keycode:    msg.Event.Keycode,
+						Keycode:    remotes.RemoteCode(msg.Event.Keycode),
 					},
 					Key{
 						remotes.KeyMapEntry{
@@ -174,6 +175,7 @@ func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
 							Type:     remotes.CodecType(msg.Key.Codec),
 							Device:   msg.Key.Device,
 							Scancode: msg.Key.Scancode,
+							Keycode:  remotes.RemoteCode(msg.Key.Keycode),
 							Repeats:  uint(msg.Key.Repeats),
 						},
 					},
@@ -200,50 +202,48 @@ func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
 		return nil, gopi.ErrBadParameter
 	}
 
-	// Get keys for keymap
-	var keymap_keys *pb.KeysReply
-	var err error
+	// Construct a hash of keys so we can quickly see
+	// if a key is in a keymap
+	var keymap_hash map[pb.RemoteCode]bool
 	if keymap != "" {
-		if keymap_keys, err = this.RemotesClient.Keys(this.NewContext(), &pb.KeysRequest{Keymap: keymap}); err != nil {
+		if keymap_keys, err := this.RemotesClient.Keys(this.NewContext(), &pb.KeysRequest{Keymap: keymap}); err != nil {
 			return nil, err
+		} else {
+			keymap_hash = make(map[pb.RemoteCode]bool, len(keymap_keys.Key))
+			for _, key := range keymap_keys.Key {
+				keymap_hash[key.Keycode] = true
+			}
 		}
 	}
 
 	// Lookup all keys
-	if all_keys, err := this.RemotesClient.LookupKeys(this.NewContext(), &pb.LookupKeysRequest{Terms: terms}); err != nil {
+	all_keys, err := this.RemotesClient.LookupKeys(this.NewContext(), &pb.LookupKeysRequest{Terms: terms})
+	if err != nil {
 		return nil, err
-	} else if keymap_keys != nil {
-		// Return keys matched by device
-		keys := make([]*Key, 0, len(keymap_keys.Key))
-		for _, key := range all_keys.Key {
-			keys = append(keys, &Key{
-				remotes.KeyMapEntry{
-					Name:     key.Name,
-					Type:     remotes.CodecType(key.Codec),
-					Device:   key.Device,
-					Scancode: key.Scancode,
-					Repeats:  uint(key.Repeats),
-				},
-			})
-		}
-		return keys, nil
-	} else {
-		// Return all keys
-		keys := make([]*Key, len(all_keys.Key))
-		for i, key := range all_keys.Key {
-			keys[i] = &Key{
-				remotes.KeyMapEntry{
-					Name:     key.Name,
-					Type:     remotes.CodecType(key.Codec),
-					Device:   key.Device,
-					Scancode: key.Scancode,
-					Repeats:  uint(key.Repeats),
-				},
+	}
+
+	// Return keys matched by device
+	keys := make([]*Key, 0, len(all_keys.Key))
+	for _, key := range all_keys.Key {
+		// If there is a hash, then filter on the hash
+		if keymap_hash != nil {
+			if _, exists := keymap_hash[key.Keycode]; exists == false {
+				continue
 			}
 		}
-		return keys, nil
+		// Append the key
+		keys = append(keys, &Key{
+			remotes.KeyMapEntry{
+				Name:     key.Name,
+				Type:     remotes.CodecType(key.Codec),
+				Device:   key.Device,
+				Scancode: key.Scancode,
+				Keycode:  remotes.RemoteCode(key.Keycode),
+				Repeats:  uint(key.Repeats),
+			},
+		})
 	}
-	return nil, nil
+	return keys, nil
 }
 
 /*
