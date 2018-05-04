@@ -181,9 +181,34 @@ func Receive(app *gopi.AppInstance, client *client.Client) error {
 func LookupKeys(app *gopi.AppInstance, client *client.Client) error {
 	keymap, _ := app.AppFlags.GetString("keymap")
 	terms := strings.Split(strings.Join(app.AppFlags.Args(), ","), ",")
+	send, _ := app.AppFlags.GetBool("send")
+	repeats, _ := app.AppFlags.GetUint("repeats")
 
 	if keys, err := client.LookupKeys(keymap, terms); err != nil {
 		return err
+	} else if send && len(keys) > 1 {
+		// Ambigous key
+		return remotes.ErrAmbiguous
+	} else if send && len(keys) == 1 {
+		// Send key
+		if err := client.SendKeycode(keymap, keys[0].Keycode, repeats); err != nil {
+			return err
+		}
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"Key", "Keycode", "Device", "Scancode", "Codec", "Repeats"})
+		for _, key := range keys {
+			table.Append([]string{
+				"Sent: " + key.Name,
+				fmt.Sprint(key.Keycode),
+				fmtDevice(key.Device),
+				fmtScancode(key.Scancode),
+				fmtCodec(key.Type),
+				fmtRepeats(key.Repeats),
+			})
+		}
+		table.Render()
+	} else if len(keys) == 0 {
+		return gopi.ErrNotFound
 	} else {
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetHeader([]string{"Key", "Keycode", "Device", "Scancode", "Codec", "Repeats"})
@@ -305,6 +330,8 @@ func main() {
 	config := gopi.NewAppConfig("rpc/client/remotes:grpc")
 	config.AppFlags.FlagString("addr", "", "Gateway address")
 	config.AppFlags.FlagString("keymap", "", "Keymap")
+	config.AppFlags.FlagBool("send", false, "Send keycode")
+	config.AppFlags.FlagUint("repeats", 0, "Override repeats value")
 
 	// Set the RPCServiceRecord for server discovery
 	config.Service = "remotes"

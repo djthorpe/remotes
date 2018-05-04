@@ -204,14 +204,14 @@ func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
 
 	// Construct a hash of keys so we can quickly see
 	// if a key is in a keymap
-	var keymap_hash map[pb.RemoteCode]bool
+	var keymap_hash map[pb.RemoteCode]*pb.Key
 	if keymap != "" {
 		if keymap_keys, err := this.RemotesClient.Keys(this.NewContext(), &pb.KeysRequest{Keymap: keymap}); err != nil {
 			return nil, err
 		} else {
-			keymap_hash = make(map[pb.RemoteCode]bool, len(keymap_keys.Key))
+			keymap_hash = make(map[pb.RemoteCode]*pb.Key, len(keymap_keys.Key))
 			for _, key := range keymap_keys.Key {
-				keymap_hash[key.Keycode] = true
+				keymap_hash[key.Keycode] = key
 			}
 		}
 	}
@@ -227,8 +227,10 @@ func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
 	for _, key := range all_keys.Key {
 		// If there is a hash, then filter on the hash
 		if keymap_hash != nil {
-			if _, exists := keymap_hash[key.Keycode]; exists == false {
+			if key_, exists := keymap_hash[key.Keycode]; exists == false {
 				continue
+			} else {
+				key = key_
 			}
 		}
 		// Append the key
@@ -246,17 +248,32 @@ func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
 	return keys, nil
 }
 
-/*
-// Send a remote scancode
-func (this *Client) SendScancode(in *SendScancodeRequest) error {
-	return gopi.ErrNotImplemented
+// Send a remote keycode
+func (this *Client) SendKeycode(keymap string, keycode remotes.RemoteCode, repeats uint) error {
+	if _, err := this.RemotesClient.SendKeycode(this.NewContext(), &pb.SendKeycodeRequest{
+		Keymap:  keymap,
+		Keycode: pb.RemoteCode(keycode),
+		Repeats: uint32(repeats),
+	}); err != nil {
+		return err
+	} else {
+		return nil
+	}
 }
 
-// Send a remote keycode
-func (this *Client) SendKeycode(in *SendKeycodeRequest) error {
-	return gopi.ErrNotImplemented
+// Send a remote scancode
+func (this *Client) SendScancode(codec remotes.CodecType, device, scancode uint32, repeats uint) error {
+	if _, err := this.RemotesClient.SendScancode(this.NewContext(), &pb.SendScancodeRequest{
+		Codec:    pb.CodecType(codec),
+		Device:   device,
+		Scancode: scancode,
+		Repeats:  uint32(repeats),
+	}); err != nil {
+		return err
+	} else {
+		return nil
+	}
 }
-*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
