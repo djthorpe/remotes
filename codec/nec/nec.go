@@ -336,8 +336,8 @@ func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
 			return gopi.ErrBadParameter
 		}
 		// Emit the device and scancode
-		pulses = this.sendbyte(pulses, uint8(device&0x00FF))
 		pulses = this.sendbyte(pulses, uint8((device&0xFF00)>>8))
+		pulses = this.sendbyte(pulses, uint8(device&0x00FF))
 		pulses = this.sendbyte(pulses, uint8(scancode&0x00FF))
 		pulses = this.sendbyte(pulses, uint8(scancode^0xFF))
 	case remotes.CODEC_NEC16:

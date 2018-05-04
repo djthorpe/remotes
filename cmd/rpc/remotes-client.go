@@ -88,13 +88,13 @@ func fmtTimestamp(ts time.Duration) string {
 }
 
 func receivePrintHeader() {
-	fmt.Printf("%-30s %-25s %-10s %-10s %-10s\n", "Key", "Event", "Keymap", "Scancode", "Timestamp")
-	fmt.Printf("%-30s %-25s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------")
+	fmt.Printf("%-30s %-25s %-10s %-10s %-10s %-10s\n", "Key", "Event", "Keymap", "Device", "Scancode", "Timestamp")
+	fmt.Printf("%-30s %-25s %-10s %-10s %-10s %-10s\n", "-------------------", "-------------------------", "----------", "----------", "----------", "----------")
 }
 
 func receivePrintEvent(event *client.Event) {
 	PrintHeaderOnce.Do(receivePrintHeader)
-	fmt.Printf("%-30s %-25s %-10s %-10s %-10s\n", fmtKey(event.Key), event.InputEvent.EventType, event.KeyMapInfo.Name, fmtScancode(event.Key.Scancode), fmtTimestamp(event.InputEvent.Timestamp))
+	fmt.Printf("%-30s %-25s %-10s %-10s %-10s %-10s\n", fmtKey(event.Key), event.InputEvent.EventType, event.KeyMapInfo.Name, fmtDevice(event.Key.Device), fmtScancode(event.Key.Scancode), fmtTimestamp(event.InputEvent.Timestamp))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

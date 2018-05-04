@@ -162,7 +162,7 @@ func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
 				return gopiError(err)
 			} else {
 				ts, _ := ptypes.Duration(msg.Event.Ts)
-				evt <- &Event{
+				event := &Event{
 					InputEvent{
 						Timestamp:  ts,
 						DeviceType: gopi.InputDeviceType(msg.Event.DeviceType),
@@ -179,15 +179,19 @@ func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
 							Repeats:  uint(msg.Key.Repeats),
 						},
 					},
-					KeyMapInfo{
+					KeyMapInfo{},
+				}
+				if msg.Keymap != nil {
+					event.KeyMapInfo = KeyMapInfo{
 						remotes.KeyMap{
 							Name:    msg.Keymap.Name,
 							Type:    remotes.CodecType(msg.Keymap.Codec),
 							Device:  msg.Keymap.Device,
 							Repeats: uint(msg.Keymap.Repeats),
 						}, uint(msg.Keymap.Keys),
-					},
+					}
 				}
+				evt <- event
 			}
 		}
 	}
