@@ -12,6 +12,8 @@ package remotes
 import (
 	"context"
 	"fmt"
+	"io"
+	"time"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
@@ -20,6 +22,7 @@ import (
 
 	// Protocol Buffer definitions
 	pb "github.com/djthorpe/remotes/rpc/protobuf/remotes"
+	ptypes "github.com/golang/protobuf/ptypes"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,11 +33,40 @@ type Client struct {
 	conn gopi.RPCClientConn
 }
 
+type KeyMapInfo struct {
+	remotes.KeyMap
+	Keys uint
+}
+
+type Key struct {
+	remotes.KeyMapEntry
+}
+
+type InputEvent struct {
+	Timestamp  time.Duration
+	DeviceType gopi.InputDeviceType
+	EventType  gopi.InputEventType
+	Keycode    uint32
+}
+
+type Event struct {
+	InputEvent
+	Key
+	KeyMapInfo
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // NEW
 
 func NewClient(conn gopi.RPCClientConn) gopi.RPCClient {
 	return &Client{pb.NewRemotesClient(conn.(grpc.GRPCClientConn).GRPCConn()), conn}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PROPERTIES
+
+func (this *Client) Conn() gopi.RPCClientConn {
+	return this.conn
 }
 
 func (this *Client) NewContext() context.Context {
@@ -47,19 +79,11 @@ func (this *Client) NewContext() context.Context {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PROPERTIES
-
-func (this *Client) Conn() gopi.RPCClientConn {
-	return this.conn
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // CALLS
 
 // Return array of codecs supported
 func (this *Client) Codecs() ([]remotes.CodecType, error) {
-	ctx := this.NewContext()
-	if reply, err := this.RemotesClient.Codecs(ctx, &pb.EmptyRequest{}); err != nil {
+	if reply, err := this.RemotesClient.Codecs(this.NewContext(), &pb.EmptyRequest{}); err != nil {
 		return nil, err
 	} else {
 		codecs := make([]remotes.CodecType, len(reply.Codec))
@@ -70,27 +94,159 @@ func (this *Client) Codecs() ([]remotes.CodecType, error) {
 	}
 }
 
-/*
 // Return array of keymaps learnt
-func (this *Client) KeyMaps() (*KeyMapsReply, error) {
-	return nil, gopi.ErrNotImplemented
+func (this *Client) KeyMaps() ([]*KeyMapInfo, error) {
+	if reply, err := this.RemotesClient.KeyMaps(this.NewContext(), &pb.EmptyRequest{}); err != nil {
+		return nil, err
+	} else {
+		keymaps := make([]*KeyMapInfo, len(reply.Keymap))
+		for i, keymap := range reply.Keymap {
+			keymaps[i] = &KeyMapInfo{
+				remotes.KeyMap{
+					Name:    keymap.Name,
+					Type:    remotes.CodecType(keymap.Codec),
+					Device:  keymap.Device,
+					Repeats: uint(keymap.Repeats),
+				}, uint(keymap.Keys),
+			}
+		}
+		return keymaps, nil
+	}
 }
 
 // Return keys learnt by keymap name
-func (this *Client) Keys(in *KeysRequest) (*KeysReply, error) {
-	return nil, gopi.ErrNotImplemented
-}
+func (this *Client) Keys(keymap string) ([]*Key, error) {
+	var reply *pb.KeysReply
+	var err error
 
-// Return all possible keys with one or more search terms
-func (this *Client) LookupKeys(in *LookupKeysRequest) (*KeysReply, error) {
-	return nil, gopi.ErrNotImplemented
+	// API call
+	if keymap == "" {
+		reply, err = this.RemotesClient.LookupKeys(this.NewContext(), &pb.LookupKeysRequest{})
+	} else {
+		reply, err = this.RemotesClient.Keys(this.NewContext(), &pb.KeysRequest{Keymap: keymap})
+	}
+
+	// Check for error
+	if err != nil {
+		return nil, err
+	}
+
+	// Return all keys
+	keys := make([]*Key, len(reply.Key))
+	for i, key := range reply.Key {
+		keys[i] = &Key{
+			remotes.KeyMapEntry{
+				Name:     key.Name,
+				Type:     remotes.CodecType(key.Codec),
+				Device:   key.Device,
+				Scancode: key.Scancode,
+				Repeats:  uint(key.Repeats),
+			},
+		}
+	}
+	return keys, nil
 }
 
 // Receive remote events
-func (this *Client) Receive(in *EmptyRequest) (Remotes_ReceiveClient, error) {
-	return nil, gopi.ErrNotImplemented
+func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
+	// Receive a stream of input events from the server, and transmit them via
+	// the event channel
+	if stream, err := this.RemotesClient.Receive(ctx, &pb.EmptyRequest{}); err != nil {
+		return err
+	} else {
+		for {
+			if msg, err := stream.Recv(); err == io.EOF {
+				break
+			} else if err != nil {
+				return gopiError(err)
+			} else {
+				ts, _ := ptypes.Duration(msg.Event.Ts)
+				evt <- &Event{
+					InputEvent{
+						Timestamp:  ts,
+						DeviceType: gopi.InputDeviceType(msg.Event.DeviceType),
+						EventType:  gopi.InputEventType(msg.Event.EventType),
+						Keycode:    msg.Event.Keycode,
+					},
+					Key{
+						remotes.KeyMapEntry{
+							Name:     msg.Key.Name,
+							Type:     remotes.CodecType(msg.Key.Codec),
+							Device:   msg.Key.Device,
+							Scancode: msg.Key.Scancode,
+							Repeats:  uint(msg.Key.Repeats),
+						},
+					},
+					KeyMapInfo{
+						remotes.KeyMap{
+							Name:    msg.Keymap.Name,
+							Type:    remotes.CodecType(msg.Keymap.Codec),
+							Device:  msg.Keymap.Device,
+							Repeats: uint(msg.Keymap.Repeats),
+						}, uint(msg.Keymap.Keys),
+					},
+				}
+			}
+		}
+	}
+	return nil
 }
 
+// Return keys with one or more search terms and optional
+// keymap argument to narrow search to a keymap entries
+func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
+	// There needs to be one or more terms
+	if len(terms) == 0 {
+		return nil, gopi.ErrBadParameter
+	}
+
+	// Get keys for keymap
+	var keymap_keys *pb.KeysReply
+	var err error
+	if keymap != "" {
+		if keymap_keys, err = this.RemotesClient.Keys(this.NewContext(), &pb.KeysRequest{Keymap: keymap}); err != nil {
+			return nil, err
+		}
+	}
+
+	// Lookup all keys
+	if all_keys, err := this.RemotesClient.LookupKeys(this.NewContext(), &pb.LookupKeysRequest{Terms: terms}); err != nil {
+		return nil, err
+	} else if keymap_keys != nil {
+		// Return keys matched by device
+		keys := make([]*Key, 0, len(keymap_keys.Key))
+		for _, key := range all_keys.Key {
+			keys = append(keys, &Key{
+				remotes.KeyMapEntry{
+					Name:     key.Name,
+					Type:     remotes.CodecType(key.Codec),
+					Device:   key.Device,
+					Scancode: key.Scancode,
+					Repeats:  uint(key.Repeats),
+				},
+			})
+		}
+		return keys, nil
+	} else {
+		// Return all keys
+		keys := make([]*Key, len(all_keys.Key))
+		for i, key := range all_keys.Key {
+			keys[i] = &Key{
+				remotes.KeyMapEntry{
+					Name:     key.Name,
+					Type:     remotes.CodecType(key.Codec),
+					Device:   key.Device,
+					Scancode: key.Scancode,
+					Repeats:  uint(key.Repeats),
+				},
+			}
+		}
+		return keys, nil
+	}
+	return nil, nil
+}
+
+/*
 // Send a remote scancode
 func (this *Client) SendScancode(in *SendScancodeRequest) error {
 	return gopi.ErrNotImplemented
@@ -107,4 +263,23 @@ func (this *Client) SendKeycode(in *SendKeycodeRequest) error {
 
 func (this *Client) String() string {
 	return fmt.Sprintf("<grpc.client.remotes>{ conn=%v }", this.conn)
+}
+
+func (this *Event) String() string {
+	return fmt.Sprintf("<grpc.client.remotes.Event>{ input_event=%v key=%v keymap=%v }", this.InputEvent, this.Key, this.KeyMapInfo)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PRIVATE METHODS
+
+func gopiError(err error) error {
+	if err == nil {
+		return nil
+	} else if grpc.IsErrCanceled(err) {
+		return nil
+	} else if grpc.IsErrDeadlineExceeded(err) {
+		return gopi.ErrDeadlineExceeded
+	} else {
+		return err
+	}
 }
