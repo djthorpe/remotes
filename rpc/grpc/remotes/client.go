@@ -83,6 +83,10 @@ func (this *Client) NewContext() context.Context {
 
 // Return array of codecs supported
 func (this *Client) Codecs() ([]remotes.CodecType, error) {
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
+
 	if reply, err := this.RemotesClient.Codecs(this.NewContext(), &pb.EmptyRequest{}); err != nil {
 		return nil, err
 	} else {
@@ -96,6 +100,10 @@ func (this *Client) Codecs() ([]remotes.CodecType, error) {
 
 // Return array of keymaps learnt
 func (this *Client) KeyMaps() ([]*KeyMapInfo, error) {
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
+
 	if reply, err := this.RemotesClient.KeyMaps(this.NewContext(), &pb.EmptyRequest{}); err != nil {
 		return nil, err
 	} else {
@@ -118,6 +126,10 @@ func (this *Client) KeyMaps() ([]*KeyMapInfo, error) {
 func (this *Client) Keys(keymap string) ([]*Key, error) {
 	var reply *pb.KeysReply
 	var err error
+
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
 
 	// API call
 	if keymap == "" {
@@ -150,6 +162,10 @@ func (this *Client) Keys(keymap string) ([]*Key, error) {
 
 // Receive remote events
 func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
+
 	// Receive a stream of input events from the server, and transmit them via
 	// the event channel
 	if stream, err := this.RemotesClient.Receive(ctx, &pb.EmptyRequest{}); err != nil {
@@ -201,6 +217,10 @@ func (this *Client) Receive(ctx context.Context, evt chan<- *Event) error {
 // Return keys with one or more search terms and optional
 // keymap argument to narrow search to a keymap entries
 func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
+
 	// There needs to be one or more terms
 	if len(terms) == 0 {
 		return nil, gopi.ErrBadParameter
@@ -254,6 +274,10 @@ func (this *Client) LookupKeys(keymap string, terms []string) ([]*Key, error) {
 
 // Send a remote keycode
 func (this *Client) SendKeycode(keymap string, keycode remotes.RemoteCode, repeats uint) error {
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
+
 	if _, err := this.RemotesClient.SendKeycode(this.NewContext(), &pb.SendKeycodeRequest{
 		Keymap:  keymap,
 		Keycode: pb.RemoteCode(keycode),
@@ -267,6 +291,10 @@ func (this *Client) SendKeycode(keymap string, keycode remotes.RemoteCode, repea
 
 // Send a remote scancode
 func (this *Client) SendScancode(codec remotes.CodecType, device, scancode uint32, repeats uint) error {
+	// One request per connection
+	this.conn.Lock()
+	defer this.conn.Unlock()
+
 	if _, err := this.RemotesClient.SendScancode(this.NewContext(), &pb.SendScancodeRequest{
 		Codec:    pb.CodecType(codec),
 		Device:   device,
