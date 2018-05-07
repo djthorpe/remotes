@@ -328,7 +328,7 @@ of ways to invoke the example client:
   * Use `remotes-client -keymap <name> -send <key> <key>` to lookup keys
     and transmit the pulses
 
-There are a variety of other arguments you can use:
+There are a variety of other flags you can use when invoking `remotes-client`:
 
 ```
 bash% remotes-client -help
@@ -362,8 +362,8 @@ Usage of remotes-client:
 ```
 
 The client uses mDNS to discover the microservice. Set the `rpc.timeout` parameter if
-the microservice isn't being discovered in time. Set the `addr` parameter to choose
-a specific microservice or port:
+the microservice isn't being discovered in the time allotted for discovery. Set the 
+`addr` parameter to choose a specific microservice or port:
 
   * `-addr 192.168.86.35:33841` connects by IP address and port
   * `-addr 192.168.86.35` connects to any discovered microservice with a specific IP address
