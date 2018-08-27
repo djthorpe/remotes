@@ -70,7 +70,7 @@ func (this *remoteevent) Codec() CodecType {
 	return this.source.Type()
 }
 
-func (this *remoteevent) Scancode() uint32 {
+func (this *remoteevent) ScanCode() uint32 {
 	return this.scancode
 }
 
@@ -86,8 +86,12 @@ func (*remoteevent) Relative() gopi.Point {
 	return gopi.ZeroPoint
 }
 
-func (*remoteevent) Keycode() gopi.KeyCode {
+func (*remoteevent) KeyCode() gopi.KeyCode {
 	return gopi.KEYCODE_NONE
+}
+
+func (*remoteevent) KeyState() gopi.KeyState {
+	return gopi.KEYSTATE_NONE
 }
 
 func (*remoteevent) Slot() uint {

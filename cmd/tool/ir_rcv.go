@@ -56,7 +56,7 @@ func PrintEntry(keymap *remotes.KeyMap, entry *remotes.KeyMapEntry, evt_type gop
 
 func HandleEvent(keymaps remotes.KeyMaps, evt remotes.RemoteEvent) error {
 	// Lookup entry
-	if entries := keymaps.LookupKeyMapEntry(evt.Codec(), evt.Device(), evt.Scancode()); entries != nil {
+	if entries := keymaps.LookupKeyMapEntry(evt.Codec(), evt.Device(), evt.ScanCode()); entries != nil {
 		for entry, keymap := range entries {
 			PrintEntry(keymap, entry, evt.EventType(), evt.Timestamp())
 		}
