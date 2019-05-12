@@ -10,13 +10,12 @@
 package sony
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
-	evt "github.com/djthorpe/gopi/util/event"
+	event "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
 )
 
@@ -34,16 +33,14 @@ type codec struct {
 	lirc       gopi.LIRC
 	codec_type remotes.CodecType
 	bit_length uint
-	cancel     context.CancelFunc
-	done       chan struct{}
-	events     <-chan gopi.Event
 	state      state
 	value      uint32
 	duration   uint32
 	length     uint
 	repeat     bool
 
-	evt.Publisher
+	event.Publisher
+	event.Tasks
 }
 
 type state uint32
@@ -86,7 +83,7 @@ var (
 // OPEN AND CLOSE
 
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<remotes.Codec.Sony.Open>{ lirc=%v type=%v }", config.LIRC, config.Type)
+	log.Debug("<remotes.codec.sony>Open{ lirc=%v type=%v }", config.LIRC, config.Type)
 
 	// Check for LIRC
 	if config.LIRC == nil {
@@ -94,8 +91,6 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	}
 
 	this := new(codec)
-
-	// Set log and lirc objects
 	this.log = log
 	this.lirc = config.LIRC
 
@@ -107,41 +102,29 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 		this.codec_type = config.Type
 	}
 
-	// Set up channels
-	this.done = make(chan struct{})
-	this.events = this.lirc.Subscribe()
-
-	// Reset
+	// Reset state
 	this.Reset()
 
-	// Create background routine
-	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
-		this.cancel = cancel
-		go this.acceptEvents(ctx)
-	}
+	// Backround tasks
+	this.Tasks.Start(this.PulseTask)
 
 	// Return success
 	return this, nil
 }
 
 func (this *codec) Close() error {
-	this.log.Debug("<remotes.Codec.Sony.Close>{ type=%v }", this.codec_type)
-
-	// Unsubscribe from LIRC signals
-	this.lirc.Unsubscribe(this.events)
-
-	// Cancel background thread, wait for done signal
-	this.cancel()
-	_ = <-this.done
+	this.log.Debug("<remotes.codec.sony>Close>{ type=%v }", this.codec_type)
 
 	// Remove subscribers to this codec
 	this.Publisher.Close()
 
-	// Blank out member variables
-	close(this.done)
-	this.events = nil
+	// End tasks
+	if err := this.Tasks.Close(); err != nil {
+		return err
+	}
+
+	// Release resources
 	this.lirc = nil
-	this.done = nil
 
 	return nil
 }
@@ -182,26 +165,32 @@ func (this *codec) Emit(value uint32, repeat bool) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// RECEIVING STATE MACHINE
+// BACKGROUND TASK
 
-func (this *codec) acceptEvents(ctx context.Context) {
-
+func (this *codec) PulseTask(start chan<- event.Signal, stop <-chan event.Signal) error {
+	start <- gopi.DONE
+	events := this.lirc.Subscribe()
 FOR_LOOP:
 	for {
 		select {
-		case <-ctx.Done():
-			break FOR_LOOP
-		case evt := <-this.events:
+		case evt := <-events:
 			if evt != nil {
 				this.receive(evt.(gopi.LIRCEvent))
 			}
+		case <-stop:
+			break FOR_LOOP
+
 		}
 	}
-	this.done <- gopi.DONE
+
+	this.lirc.Unsubscribe(events)
+
+	// Success
+	return nil
 }
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.Codec.Sony.Receive>{ type=%v evt=%v }", this.codec_type, evt)
+	this.log.Debug2("<remotes.codec.sony>Receive{ type=%v evt=%v }", this.codec_type, evt)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {
@@ -251,7 +240,7 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 // SENDING
 
 func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
-	this.log.Debug2("<remotes.Codec.Sony.SendSend{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
+	this.log.Debug2("<remotes.codec.sony>Send{ codec_type=%v device=0x%08X scancode=0x%08X repeats=%v }", this.codec_type, device, scancode, repeats)
 
 	// Array of pulses
 	pulses := make([]uint32, 0, 100)
