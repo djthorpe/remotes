@@ -19,3 +19,4 @@
 *.pb.go
 *.keymap
 go.sum
+.vscode

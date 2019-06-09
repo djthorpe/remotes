@@ -65,9 +65,18 @@ and then reboot your Raspberry Pi:
 dtoverlay=lirc-rpi,gpio_in_pin=22,gpio_out_pin=23
 ```
 
-Your LIRC should then be able to see the device `/dev/lirc0`. If not check output 
-of the `lsmod` command.  The best reference for how to interact with the device at the low 
-level is [here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-intro.html).
+If you're using a kernel 4.19.X or above, you need to use the `gpio-ir` module instead.
+Then the overlays are as follows:
+
+```
+dtoverlay=gpio-ir,gpio_pin=22
+dtoverlay=gpio-ir-tx,gpio_pin=23
+```
+
+Your Raspberry Pi should then be able to see the device `/dev/lirc0` and/or `/dev/lirc1`.
+If not check output of the `lsmod` command.  The best reference for how to interact with
+the device at the low level is
+[here](https://www.kernel.org/doc/html/latest/media/uapi/rc/lirc-dev-intro.html).
 
 ## Software Installation
 
@@ -130,8 +139,10 @@ You can use the following optional common flags with all the binaries:
     	When writing log to file, append output to end of file
   -log.file string
     	File for logging (default: log to stderr)
-  -lirc.device string
-      	LIRC device (default "/dev/lirc0")
+  -lirc.in string
+    	LIRC input device
+  -lirc.out string
+    	LIRC output device
   -keymap.db string
     	Key mapping database path (default "/var/local/remotes")
   -keymap.ext string
