@@ -1,6 +1,6 @@
 /*
 	Go Language Raspberry Pi Interface
-    (c) Copyright David Thorpe 2016-2018
+    (c) Copyright David Thorpe 2019
     All Rights Reserved
 
 	Documentation http://djthorpe.github.io/gopi/
@@ -10,39 +10,37 @@
 package rc5
 
 import (
-	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
-	evt "github.com/djthorpe/gopi/util/event"
+	event "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-// Sony Configuration - for 12, 15 and 20
+// RC5 Configuration
 type Codec struct {
 	LIRC gopi.LIRC
 	Type remotes.CodecType
 }
 
 type codec struct {
-	log         gopi.Logger
-	lirc        gopi.LIRC
-	codec_type  remotes.CodecType
-	bit_length  uint
-	cancel      context.CancelFunc
-	done        chan struct{}
-	events      <-chan gopi.Event
-	subscribers *evt.PubSub
-	state       state
-	bits        []bool
-	length      uint
-	repeat      bool
+	log        gopi.Logger
+	lirc       gopi.LIRC
+	codec_type remotes.CodecType
+	bit_length uint
+
+	// State
+	state  state
+	bits   []bool
+	repeat bool
+
+	event.Publisher
+	event.Tasks
 }
 
 type state uint32
@@ -81,7 +79,7 @@ var (
 // OPEN AND CLOSE
 
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<remotes.Codec.RC5.Open>{ lirc=%v type=%v }", config.LIRC, config.Type)
+	log.Debug("<remotes.codec.rc5>Open{ lirc=%v type=%v }", config.LIRC, config.Type)
 
 	// Check for LIRC
 	if config.LIRC == nil {
@@ -94,47 +92,35 @@ func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.log = log
 	this.lirc = config.LIRC
 
-	// Set up channels
-	this.done = make(chan struct{})
-	this.events = this.lirc.Subscribe()
-	this.subscribers = evt.NewPubSub(0)
+	// Set codec type
+	this.codec_type = config.Type
 
 	// Set bit length to 14 bits
 	this.bit_length = 14
-	this.codec_type = remotes.CODEC_RC5
 
 	// Reset
 	this.Reset(false)
 
-	// Create background routine
-	if ctx, cancel := context.WithCancel(context.Background()); ctx != nil {
-		this.cancel = cancel
-		go this.acceptEvents(ctx)
-	}
+	// Backround tasks
+	this.Tasks.Start(this.PulseTask)
 
 	// Return success
 	return this, nil
 }
 
 func (this *codec) Close() error {
-	this.log.Debug("<remotes.Codec.RC5.Close>{ type=%v }", this.codec_type)
-
-	// Unsubscribe from LIRC signals
-	this.lirc.Unsubscribe(this.events)
-
-	// Cancel background thread, wait for done signal
-	this.cancel()
-	_ = <-this.done
+	this.log.Debug("<remotes.codec.rc5>Close>{ type=%v }", this.codec_type)
 
 	// Remove subscribers to this codec
-	this.subscribers.Close()
+	this.Publisher.Close()
 
-	// Blank out member variables
-	close(this.done)
-	this.events = nil
-	this.subscribers = nil
+	// End tasks
+	if err := this.Tasks.Close(); err != nil {
+		return err
+	}
+
+	// Release resources
 	this.lirc = nil
-	this.done = nil
 
 	return nil
 }
@@ -143,7 +129,7 @@ func (this *codec) Close() error {
 // STRINGIFY
 
 func (this *codec) String() string {
-	return fmt.Sprintf("<remotes.Codec.RC5>{ type=%v }", this.codec_type)
+	return fmt.Sprintf("<remotes.codec.rc5>{ type=%v }", this.codec_type)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -154,55 +140,50 @@ func (this *codec) Type() remotes.CodecType {
 }
 
 func (this *codec) Reset(repeat bool) {
+	this.log.Debug2("<remotes.codec.rc5>Reset{ repeat=%v }", repeat)
 	this.state = STATE_EXPECT_FIRST_PULSE
 	this.bits = make([]bool, 0, this.bit_length*2)
-	this.length = 0
 	this.repeat = repeat
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PUBLISHER INTERFACE
+// SENDING
 
-func (this *codec) Subscribe() <-chan gopi.Event {
-	return this.subscribers.Subscribe()
-}
-
-func (this *codec) Unsubscribe(subscriber <-chan gopi.Event) {
-	this.subscribers.Unsubscribe(subscriber)
-}
-
-func (this *codec) Emit(value uint32, repeat bool) {
-	if scancode, device, err := codeForCodec(this.codec_type, value); err != nil {
-		if err != gopi.ErrBadParameter {
-			this.log.Warn("Emit: %v", err)
-		}
-	} else {
-		this.subscribers.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode, device, repeat))
-	}
+func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
+	return gopi.ErrNotImplemented
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// RECEIVING STATE MACHINE
+// BACKGROUND TASK
 
-func (this *codec) acceptEvents(ctx context.Context) {
-
+func (this *codec) PulseTask(start chan<- event.Signal, stop <-chan event.Signal) error {
+	start <- gopi.DONE
+	events := this.lirc.Subscribe()
 FOR_LOOP:
 	for {
 		select {
-		case <-ctx.Done():
-			break FOR_LOOP
-		case evt := <-this.events:
+		case evt := <-events:
 			if evt != nil {
 				this.receive(evt.(gopi.LIRCEvent))
 			}
+		case <-stop:
+			break FOR_LOOP
+
 		}
 	}
-	this.done <- gopi.DONE
+
+	// Unsubscribe
+	this.lirc.Unsubscribe(events)
+
+	// Success
+	return nil
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// PRIVATE METHODS
+
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.Codec.RC5.Receive>{ type=%v state=%v evt=%v }", this.codec_type, this.state, evt)
-	//fmt.Println(this.state, evt)
+	this.log.Debug("<remotes.codec.rc5>Receive{ type=%v state=%v type=%v value=%v }", this.codec_type, this.state, evt.Type(), evt.Value())
 	switch this.state {
 	case STATE_EXPECT_FIRST_PULSE:
 		if LONG_PULSE.Matches(evt) {
@@ -214,29 +195,29 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 		} else {
 			this.Reset(false)
 		}
-	case STATE_EXPECT_PULSE:
-		if LONG_PULSE.Matches(evt) {
-			this.eject(true, true)
-			this.state = STATE_EXPECT_SPACE
-		} else if SHORT_PULSE.Matches(evt) {
-			this.eject(true)
-			this.state = STATE_EXPECT_SPACE
-		} else {
-			this.Reset(false)
-		}
 	case STATE_EXPECT_SPACE:
-		if LONG_TIMEOUT.GreaterThan(evt) {
-			fmt.Println("Got timeout")
-			this.eject(true)
+		if SHORT_SPACE.Matches(evt) {
+			this.eject(false)
 			this.state = STATE_EXPECT_PULSE
 		} else if LONG_SPACE.Matches(evt) {
 			this.eject(false, false)
 			this.state = STATE_EXPECT_PULSE
-		} else if SHORT_SPACE.Matches(evt) {
+		} else if LONG_TIMEOUT.GreaterThan(evt) {
 			this.eject(false)
-			this.state = STATE_EXPECT_PULSE
+			this.state = STATE_EXPECT_FIRST_PULSE
 		} else if REPEAT_SPACE.Matches(evt) {
+			this.eject(false)
 			this.Reset(true)
+		} else {
+			this.Reset(false)
+		}
+	case STATE_EXPECT_PULSE:
+		if SHORT_PULSE.Matches(evt) {
+			this.eject(true)
+			this.state = STATE_EXPECT_SPACE
+		} else if LONG_PULSE.Matches(evt) {
+			this.eject(true, true)
+			this.state = STATE_EXPECT_SPACE
 		} else {
 			this.Reset(false)
 		}
@@ -247,36 +228,50 @@ func (this *codec) receive(evt gopi.LIRCEvent) {
 
 func (this *codec) eject(bits ...bool) {
 	this.bits = append(this.bits, bits...)
-	this.length += uint(len(bits))
 
-	if uint(len(this.bits)) == this.bit_length*2 {
-		value := uint32(0)
-		for i, j := uint(0), uint(0); i < this.bit_length; i, j = i+1, j+2 {
-			value <<= 1
-			if this.bits[j] == this.bits[j+1] {
-				// Invalid Manchester Code
-				return
-			} else if this.bits[j] {
-				// 10 => 0
-				value |= 0
+	/*
+		for _, b := range this.bits {
+			if b {
+				fmt.Print("1")
 			} else {
-				// 01 => 1
-				value |= 1
+				fmt.Print("0")
 			}
 		}
-		this.Emit(value, this.repeat)
+		fmt.Println("")
+	*/
+
+	// Return if not the right number of bits
+	if uint(len(this.bits)) != this.bit_length*2 {
+		return
+	}
+
+	// Accumlate into value
+	var value uint32
+	for i, j := 0, 0; i < int(this.bit_length); i, j = i+1, j+2 {
+		value <<= 1
+		if this.bits[j] == this.bits[j+1] {
+			// Invalid Manchester Code
+			return
+		} else if this.bits[j] {
+			// 10 => 0
+			value |= 0
+		} else {
+			// 01 => 1
+			value |= 1
+		}
+	}
+	this.emit(value, this.repeat)
+}
+
+func (this *codec) emit(value uint32, repeat bool) {
+	if scancode, device, err := codeForCodec(this.codec_type, value); err != nil {
+		if err != gopi.ErrBadParameter {
+			this.log.Warn("Emit: %v", err)
+		}
+	} else {
+		this.Emit(remotes.NewRemoteEvent(this, time.Since(timestamp), scancode, device, repeat))
 	}
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// SENDING
-
-func (this *codec) Send(device uint32, scancode uint32, repeats uint) error {
-	return gopi.ErrNotImplemented
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// PRIVATE METHODS
 
 func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error) {
 	switch codec {
@@ -284,8 +279,8 @@ func codeForCodec(codec remotes.CodecType, value uint32) (uint32, uint32, error)
 		// scancode is lowest 6 bits (0x03F), device is next 5 bits (7C0)
 		scancode := value & 0x003F
 		device := value & 0x07C0 >> 6
-		header := value & 0x3800 >> 11
-		fmt.Printf("value=%v header=%v scancode=%X device=%X\n", strconv.FormatUint(uint64(value), 2), strconv.FormatUint(uint64(header), 2), scancode, device)
+		//header := value & 0x3800 >> 11
+		//fmt.Printf("value=%v header=%v scancode=%X device=%X\n", strconv.FormatUint(uint64(value), 2), strconv.FormatUint(uint64(header), 2), scancode, device)
 		// TODO: Check header
 		return scancode, device, nil
 	default:

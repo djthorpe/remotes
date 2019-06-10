@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
@@ -22,11 +23,32 @@ import (
 	_ "github.com/djthorpe/gopi/sys/logger"
 
 	// Codecs
-	_ "github.com/djthorpe/remotes/sys/nec"
-	_ "github.com/djthorpe/remotes/sys/sony"
+	//_ "github.com/djthorpe/remotes/sys/nec"
+	//_ "github.com/djthorpe/remotes/sys/panasonic"
+	_ "github.com/djthorpe/remotes/sys/rc5"
+	//_ "github.com/djthorpe/remotes/sys/sony"
 )
 
+var (
+	once sync.Once
+)
+
+func PrintEvent(evt remotes.RemoteEvent) {
+	once.Do(func() {
+		fmt.Printf("SCAN DEVICE   CODEC      REPEAT\n")
+	})
+	codec := strings.TrimLeft(fmt.Sprint(evt.Codec()), "CODEC_")
+	repeat := strings.TrimLeft(fmt.Sprint(evt.EventType()), "INPUT_EVENT_")
+	fmt.Printf("0x%02X 0x%06X %-10s %-10s\n", evt.ScanCode(), evt.Device(), codec, repeat)
+}
+
 func Receive(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct{}) error {
+
+	// Set a longish LIRC timeout value
+	if err := app.LIRC.SetRcvTimeout(1000 * 200); err != nil {
+		return err
+	}
+
 	// Create a merged event channel
 	merger := event.Merger{}
 
@@ -48,7 +70,7 @@ FOR_LOOP:
 		case <-stop:
 			break FOR_LOOP
 		case event := <-evt:
-			fmt.Println(event)
+			PrintEvent(event.(remotes.RemoteEvent))
 		}
 	}
 

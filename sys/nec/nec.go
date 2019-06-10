@@ -89,9 +89,6 @@ var (
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
 
-////////////////////////////////////////////////////////////////////////////////
-// OPEN AND CLOSE
-
 func (config Codec) Open(log gopi.Logger) (gopi.Driver, error) {
 	log.Debug("<remotes.codec.nec>Open{ lirc=%v type=%v }", config.LIRC, config.Type)
 
@@ -278,7 +275,7 @@ func (this *codec) sendbyte(pulses []uint32, value uint8) []uint32 {
 // PRIVATE METHODS
 
 func (this *codec) receive(evt gopi.LIRCEvent) {
-	this.log.Debug2("<remotes.codec.nec>Receive{ type=%v evt=%v }", this.codec_type, evt)
+	this.log.Debug2("<remotes.codec.nec>Receive{ type=%v state=%v evt=%v }", this.codec_type, this.state, evt)
 	switch this.state {
 	case STATE_EXPECT_HEADER_PULSE:
 		if HEADER_PULSE.Matches(evt) {

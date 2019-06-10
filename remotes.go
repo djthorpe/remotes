@@ -136,6 +136,9 @@ type RemoteEvent interface {
 
 	// Return type of codec for decoded transmission
 	Codec() CodecType
+
+	// Return device identifier
+	Device() uint32
 }
 
 /////////////////////////////////////////////////////////////////////
