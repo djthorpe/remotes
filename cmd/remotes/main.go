@@ -15,17 +15,17 @@ import (
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
-	event "github.com/djthorpe/gopi/util/event"
 	remotes "github.com/djthorpe/remotes"
 
 	// Modules
 	_ "github.com/djthorpe/gopi-hw/sys/lirc"
 	_ "github.com/djthorpe/gopi/sys/logger"
+	_ "github.com/djthorpe/remotes/sys/keymap"
 
 	// Codecs
 	//_ "github.com/djthorpe/remotes/sys/nec"
-	//_ "github.com/djthorpe/remotes/sys/panasonic"
-	_ "github.com/djthorpe/remotes/sys/rc5"
+	_ "github.com/djthorpe/remotes/sys/panasonic"
+	//_ "github.com/djthorpe/remotes/sys/rc5"
 	//_ "github.com/djthorpe/remotes/sys/sony"
 )
 
@@ -40,6 +40,7 @@ func PrintEvent(evt remotes.RemoteEvent) {
 	codec := strings.TrimLeft(fmt.Sprint(evt.Codec()), "CODEC_")
 	repeat := strings.TrimLeft(fmt.Sprint(evt.EventType()), "INPUT_EVENT_")
 	fmt.Printf("0x%02X 0x%06X %-10s %-10s\n", evt.ScanCode(), evt.Device(), codec, repeat)
+
 }
 
 func Receive(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct{}) error {
@@ -49,18 +50,15 @@ func Receive(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct{})
 		return err
 	}
 
-	// Create a merged event channel
-	merger := event.Merger{}
-
-	// Get codecs
-	for _, codec := range codecs() {
-		if instance, ok := app.ModuleInstance(codec).(remotes.Codec); ok && instance != nil {
-			merger.Merge(instance)
-		}
+	// Create generic keymap database
+	db := app.ModuleInstance("keymap").(remotes.KeymapDatabase)
+	keymap, err := db.New("test", remotes.CODEC_NONE, remotes.DEVICE_UNKNOWN)
+	if err != nil && err != remotes.ErrDuplicateKeyMap {
+		return err
 	}
 
-	// Subsribe to merger
-	evt := merger.Subscribe()
+	// Subsribe to keymapper
+	evt := db.Subscribe()
 
 	// Start event loop
 	start <- gopi.DONE
@@ -70,13 +68,21 @@ FOR_LOOP:
 		case <-stop:
 			break FOR_LOOP
 		case event := <-evt:
-			PrintEvent(event.(remotes.RemoteEvent))
+			if event != nil {
+				PrintEvent(event.(remotes.RemoteEvent))
+
+				// Map key
+				if key, err := db.Map(keymap, event.(remotes.RemoteEvent), gopi.KEYCODE_0, gopi.KEYSTATE_NONE); err != nil {
+					fmt.Println("Error:", err)
+				} else {
+					fmt.Println("Mapped:", key)
+				}
+			}
 		}
 	}
 
 	// Stop background task
-	merger.Unsubscribe(evt)
-	merger.Close()
+	db.Unsubscribe(evt)
 
 	// Return success
 	return nil
@@ -91,10 +97,16 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func codecs() []string {
+func modules() []string {
 	codecs := make([]string, 0)
-	// Obtain all the codecs
+	// Obtain the codecs
 	for _, module := range gopi.ModulesByType(gopi.MODULE_TYPE_OTHER) {
+		if strings.HasPrefix(module.Name, "remotes/") {
+			codecs = append(codecs, module.Name)
+		}
+	}
+	// Include keymapper
+	for _, module := range gopi.ModulesByType(gopi.MODULE_TYPE_KEYMAP) {
 		if strings.HasPrefix(module.Name, "remotes/") {
 			codecs = append(codecs, module.Name)
 		}
@@ -103,8 +115,8 @@ func codecs() []string {
 }
 
 func main() {
-	// Append the codecs
-	config := gopi.NewAppConfig(codecs()...)
+	// Append the modules and the keymapper to the configuration
+	config := gopi.NewAppConfig(modules()...)
 
 	// Run the command line tool
 	os.Exit(gopi.CommandLineTool2(config, Main, Receive))

@@ -92,6 +92,58 @@ type Codec interface {
 	Send(device uint32, scancode uint32, repeats uint) error
 }
 
+// New keymap database
+type KeymapDatabase interface {
+	gopi.Driver
+	gopi.Publisher
+
+	// Return keymaps. Use DEVICE_UNKNOWN and CODEC_NONE to retrieve all keymaps
+	Keymaps(CodecType, uint32) []Keymap
+
+	// Create a new keymap with name, codec and device
+	New(string, CodecType, uint32) (Keymap, error)
+
+	// Delete keymap
+	Delete(Keymap) error
+
+	// Lookup a key by an event
+	LookupByEvent(RemoteEvent) Key
+
+	// Lookup keys by name, or all keys
+	KeyByName(...string) []Key
+
+	// Map an input event to a key code and state
+	Map(Keymap, RemoteEvent, gopi.KeyCode, gopi.KeyState) (Key, error)
+}
+
+type Keymap interface {
+	// Return name for the keymap
+	Name() string
+
+	// Return major codec type
+	Codec() CodecType
+
+	// Return major device number
+	Device() uint32
+}
+
+type Key interface {
+	// Return name for the keymap
+	Name() string
+
+	// Return major codec type
+	Codec() CodecType
+
+	// Return major device number
+	Device() uint32
+
+	// Return KeyCode
+	KeyCode() gopi.KeyCode
+
+	// Return KeyState
+	KeyState() gopi.KeyState
+}
+
 type KeyMaps interface {
 	gopi.Driver
 

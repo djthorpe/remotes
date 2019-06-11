@@ -176,9 +176,8 @@ FOR_LOOP:
 		}
 	}
 
-	this.lirc.Unsubscribe(events)
-
 	// Success
+	this.lirc.Unsubscribe(events)
 	return nil
 }
 
